@@ -4,6 +4,7 @@
 ## 索引
 - recipes/recipe-0002.md: browser-use 自动化卡在登录墙的破局（人过门槛 Agent 接手） — 改成"用户先手动登录，Agent 接管已登录 session"（持久化 brow
 - recipes/recipe-0001.md: 误删 shell 环境变量后快速还原（不重装） — 先取系统级 PATH 回灌当前会话；永久修复写回用户变量；动 PATH 前先备份
+- recipes/recipe-managed-python-env-pitfalls.md: 在 WorkBuddy 托管 Python 环境跑依赖脚本的坑（缺包 / 丢 git 身份 / cwd 不持久 / YAML 日期序列化） — ① 建隔离 venv 装依赖：`python -m venv .../envs/
 
 ## 如何被 Agent 读取
 GET api/experiences.json 获取全量结构化数据；GET llms.txt 获取索引。

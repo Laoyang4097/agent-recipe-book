@@ -65,7 +65,11 @@ def make_contributor_id(handle: str) -> str:
 
 
 def render_md(payload: dict) -> str:
-    """把 JSON 渲染为带 frontmatter 的 Markdown（frontmatter = JSON 同构）。"""
+    """把 JSON 渲染为带 frontmatter 的 Markdown。
+    frontmatter 用 yaml.safe_dump 生成，保证含冒号/引号的值也能正确往返解析
+    （手拼字符串会在 failure 含 'xxx: yyy' 时破坏 YAML）。"""
+    if yaml is None:
+        sys.exit("❌ 未安装 pyyaml，无法安全渲染 frontmatter。请先 pip install pyyaml。")
     p = dict(payload)
     # 系统填充
     if "created_at" not in p:
@@ -75,41 +79,29 @@ def render_md(payload: dict) -> str:
     if "contributor" in p:
         del p["contributor"]
 
-    lines = ["---"]
-    for k in ("id", "title", "tags", "model", "problem", "dead_ends",
-              "solution", "result", "retrospective", "skills", "harness",
-              "hardware", "agent_config", "verified", "status",
-              "contributor_id", "created_at"):
-        if k not in p:
-            continue
-        v = p[k]
-        if isinstance(v, (list, dict)):
-            # YAML 风格
-            if k == "dead_ends":
-                lines.append("dead_ends:")
-                for d in v:
-                    lines.append(f"  - attempt: {d.get('attempt','')}")
-                    lines.append(f"    failure: {d.get('failure','')}")
-                    lines.append(f"    duration: {d.get('duration','')}")
-                    lines.append(f"    early_signal: {d.get('early_signal','')}")
-            elif k == "hardware" and isinstance(v, dict):
-                inner = ", ".join(f"{kk}: {vv}" for kk, vv in v.items())
-                lines.append(f"hardware: {{{inner}}}")
-            else:
-                lines.append(f"{k}: {json.dumps(v, ensure_ascii=False)}")
-        else:
-            lines.append(f"{k}: {v}")
-    lines.append("---")
-    lines.append("")
-    lines.append("## 背景与卡点")
-    lines.append("")
-    lines.append(p.get("problem", ""))
-    lines.append("")
-    lines.append("## 死胡同详解 / 解法步骤 / 复盘")
-    lines.append("")
-    lines.append("详见 frontmatter 结构化字段；此处供人深读。")
-    lines.append("")
-    return "\n".join(lines)
+    ordered = ["id", "title", "tags", "model", "problem", "dead_ends",
+               "solution", "result", "retrospective", "skills", "harness",
+               "hardware", "agent_config", "verified", "status",
+               "contributor_id", "created_at"]
+    fm = {k: p[k] for k in ordered if k in p}
+    header = yaml.safe_dump(fm, allow_unicode=True, sort_keys=False,
+                            default_flow_style=False)
+    body = (
+        "\n## 背景与卡点\n\n" + (p.get("problem") or "") + "\n\n"
+        "## 死胡同详解 / 解法步骤 / 复盘\n\n"
+        "详见 frontmatter 结构化字段；此处供人深读。\n"
+    )
+    return "---\n" + header + "---\n" + body
+
+
+def _roundtrip_ok(md_path: str) -> bool:
+    """渲染后回读 frontmatter，确认能被 YAML 解析（防止写出坏 .md）。"""
+    try:
+        with open(md_path, "r", encoding="utf-8") as f:
+            text = f.read()
+        return parse_frontmatter(text) is not None
+    except Exception:
+        return False
 
 
 def ingest(json_path: str):
@@ -129,6 +121,11 @@ def ingest(json_path: str):
     os.makedirs(RECIPES_DIR, exist_ok=True)
     with open(md_path, "w", encoding="utf-8") as f:
         f.write(render_md(payload))
+    # 闸门：渲染出的 frontmatter 必须能被 YAML 回读，否则删文件并报错，避免污染仓库
+    if not _roundtrip_ok(md_path):
+        os.remove(md_path)
+        print("❌ 渲染出的 frontmatter 无法被 YAML 解析，已回滚该文件。请检查字段取值。")
+        sys.exit(1)
     print(f"✅ 已写入 {md_path}")
     rebuild()
 
