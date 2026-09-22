@@ -1,25 +1,62 @@
-# 写入 API（Phase 1 设计稿）
+# 写入 API 与静态生成器（Phase 1 设计稿 · 对齐 v3.0）
 
-本目录存放「Agent 经 API 写入配方」的设计与后续实现。
+> 本目录承载「解题配方库」的**写入侧**与**机器可读生成**。当前为设计稿 + 最小可运行脚本 `ingest.py`。
+> 设计约束：Agent 写入 / 人只读；写入契约 = JSON；对齐 `recipe.schema.md` v3.0。
 
-## 当前状态
-Phase 1（截至 2026-09）：**未部署**。临时投稿通道为 Fork + PR（见根目录 [CONTRIBUTING.md](../CONTRIBUTING.md)）。
+---
 
-## 目标
-- `POST /api/recipes`：接收一条符合 [recipe.schema.md](../recipe.schema.md) 的完整 Markdown 配方
-- **两段式脱敏**：① 正则扫描（密钥 / 邮箱 / 手机号 / 内网地址）② 审计 Agent 语义复检
-- 写入成功后**自动重建根 `llms.txt` 索引**，使全站 Agent 立即可读
-- 可选：提交者 Agent 凭 token 认领贡献，进入表彰榜（参考清华「清小搭」永久表彰模式）
+## 1. 架构位置
 
-## 技术选型（待定）
-- 轻量路线：Python FastAPI + GitHub Contents API（直接写仓库，天然版本化、开源友好）
-- 或：前端表单 + 数据库 + 定时生成静态 `llms.txt` 与 `recipes/*.md`
+```
+[贡献者 Agent] ──(POST JSON, 已脱敏)──▶ [写入 API] ──▶ [存储层 recipes/*.md]
+                                                  │            │
+                                                  │            ├─ 渲染 .md (frontmatter=JSON同构)
+                                                  │            └─ 重建 llms.txt + experiences.json
+[WorkBuddy 经验向导] ◀── 检索 llms.txt / experiences.json ◀── 学生提问
+```
 
-## 明确的 MVP 边界（不做）
-- **不做 MCP server**：本仓库只需"Agent 来读"，用 `llms.txt` + 公开 `.md` 即可，MCP 是 Phase 2
-- **不做完整 CLI 工具**：`curl` 抓取全库已满足 Agent 调用需求
-- **不做人工手填表单**：人只读，写入仅限 Agent（经 API 或 PR）
+## 2. 写入 API 契约（v3.0）
 
-## 验收（对应 B 赛道）
-- 能演示：外部 Agent `curl llms.txt` → 拿到全库索引 → 拉取某条配方 → 复用解法
-- 能演示：一条新配方经 API 提交 → 自动脱敏 → 出现在 `llms.txt`
+**端点（规划）**：`POST /api/recipes`
+**负载**：JSON，字段见 `recipe.schema.md` v3.0。
+**系统自动填充**：`contributor_id`（对匿名标识做稳定哈希）、`created_at`（接收日期）。
+**校验规则**：
+- 缺必填（id/title/tags/model/problem/dead_ends/solution/status）→ 400 拒绝
+- `id` 已存在 → 409 拒绝（或返回冲突建议 `<id>-2`）
+- `dead_ends` 每条缺 4 子字段 → 400 拒绝
+- 脱敏：正则命中敏感模式 → `status: quarantined`（不公开）
+
+**两段式脱敏**：① 贡献者 Agent 自检（有原始上下文）② API 复检（正则 + 审计 Agent）。
+
+## 3. 静态生成器（ingest.py）
+
+最小可运行脚本，职责：
+1. `ingest <file.json>`：校验 → 渲染 `recipes/<id>.md` → 调 rebuild
+2. `rebuild`：扫描 `recipes/*.md`，解析 frontmatter → 重建 `llms.txt` 与 `api/experiences.json`
+
+依赖：`pyyaml`（`pip install pyyaml`）。无其它外部依赖。
+
+**experiences.json 结构**（Agent 一次抓取得全库）：
+```json
+[
+  {
+    "id":"recipe-0001",
+    "title":"…","tags":[…],"model":"Hy3",
+    "problem":"…","dead_ends":[…],"solution":"…","result":"…",
+    "status":"published","contributor_id":"anon-…","created_at":"2026-09-23"
+  }
+]
+```
+
+## 4. MVP 临时方案（无服务器）
+
+若决赛前未部署服务器，可用**已连接的 GitHub 连接器**作"写入 API"替身：
+- 贡献者 Agent 生成 `recipes/<id>.md` → 连接器 `push_files` 写进仓库 → 触发 rebuild（或手动跑 `ingest.py rebuild` 重建 llms.txt/json）。
+- 前提：把写入账号加为仓库 collaborator（或 transfer 到该账号）。
+
+## 5. 验收
+
+- 任意合规 JSON 经 `ingest` 后生成合规 .md + 进入 llms.txt/json
+- `curl api/experiences.json` 一次拉全库，字段解析零报错
+- 缺必填的负载被拒（不污染库）
+- `status≠published` 不出现在公开 llms.txt

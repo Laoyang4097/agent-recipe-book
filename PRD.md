@@ -111,66 +111,22 @@
 
 每条配方 = 一个 SKILL.md 兼容的 Markdown 文件 + 一条 JSON 记录。
 
-### 7.1 字段定义
-```
----
-name: recipe-<slug>            # 唯一短标识，如 recipe-anti-crawl-hy3
-title: 用 Hy3 破反爬的配方
-description: 当用 Hy3 写爬虫被反爬封锁时，如何避开硬刚 UA 的死胡同
-domain: [爬虫, 反爬, 数据采集]
-model: Hy3                      # 使用的模型，如 Hy3 / Deepseek-V4.1-flash
-skills: [anti-detect, proxy-rotate]   # 使用的 skill 列表
-harness: WorkBuddy              # 运行环境/框架
-hardware:                      # 电脑配置（非敏感，保留以助复现）
-  os: Windows 10 22H2
-  cpu: i5-10210U
-  ram: 8GB
-  gpu: 集成显卡 UHD
-contributor: 匿名/昵称          # 可匿名
-created: 2026-09-23
----
+### 7.1 字段定义（引用 v3.0）
 
-## 问题
-用 Hy3 写 Python 爬虫抓某站，频繁被封 IP。
+> **字段规范以 `recipe.schema.md` (v3.0) 为唯一权威来源**，本文档不再内联定义。v3.0 要点：
+> - 单一真值源 = Markdown 文件头部的 YAML frontmatter；正文仅作叙事补充，机器不强制解析正文。
+> - 死胡同（dead_ends）结构化进 frontmatter 的 YAML 数组，每条含 `attempt / failure / duration / early_signal`。
+> - 写入契约 = JSON：贡献者 Agent 经写入 API 提交 JSON，系统渲染为 `.md` + 重建 `llms.txt` / `api/experiences.json`。
+> - 必填 8 字段：`id / title / tags / model / problem / dead_ends[] / solution / status`。
+> - 完整字段表、JSON 示例、渲染后 .md 示例、脱敏治理、开放边界见 `recipe.schema.md` 与 `Schema设计_PRD_v3.md`。
 
-## 试过但失败的（死胡同）
-每条死胡同**结构化记录**，避免"复杂情况一句话带过"；字段：尝试 / 失败现象 / 卡了多久 / 本可提前避开的信号。
-### 死胡同 1：硬改 UA 伪装浏览器
-- 尝试：把 User-Agent 改成 Chrome 字符串
-- 失败现象：仍被 TLS 指纹识别封（JA3 不匹配）
-- 卡了多久：约 40 分钟
-- 本可提前避开的信号：目标站有 TLS 指纹校验，单改 UA 无效
-### 死胡同 2：调高并发
-- 尝试：并发从 5 提到 50
-- 失败现象：IP 直接拉黑 24h
-- 卡了多久：约 10 分钟（含封禁等待）
-- 本可提前避开的信号：无代理池时高并发是红线
+### 7.2 写入 API 负载（引用 v3.0）
 
-## 最终解法
-- 降频至 1 req/2s
-- 请求头加随机化 Accept-Language + 真实 Referer
-- 用住宅代理轮询（非数据中心 IP）
-
-## 用的工具
-Python + requests + 上述 skill
-
-## 复盘
-反爬本质是对抗指纹+行为，不是单改 UA；硬件弱时优先降频保活。
-```
-
-### 7.2 配方字段（写入 API 负载）
-| 字段 | 类型 | 必填 | 说明 |
-|---|---|---|---|
-| 问题 | 长文本 | ✅ | 在解决什么 |
-| 死胡同[] | 结构数组 | ✅ | 每条含 尝试/失败现象/卡了多久/本可提前避开的信号（灵魂字段，须结构化） |
-| 最终解法 | 长文本 | ✅ | 怎么破局 |
-| 模型 | 单选 | ✅ | Hy3 / Deepseek-V4.1-flash / 其他 |
-| skills | 多选 | ⚠️ | 用到的 skill |
-| harness | 文本 | ⚠️ | 运行框架 |
-| soul/Agent.md | 附件/长文本 | ⚠️ | 脱敏后的人格配置 |
-| 硬件配置 | 文本 | ⚠️ | OS/CPU/RAM/GPU |
-| 领域标签 | 多选 | ✅ | 分类 |
-| 贡献者 | 文本 | ⚠️ | 可匿名 |
+- 负载格式：**JSON**，字段同 `recipe.schema.md` v3.0 表。
+- `contributor_id` 与 `created_at` 由系统在接收时生成（贡献者无需填）。
+- 校验：缺必填 / 类型错 / id 撞车 → 拒绝（不污染库）。
+- 脱敏：贡献者 Agent 自检 + API 复检，均过才 `status: published`。
+- 与旧版差异：砍掉 `summary/difficulty/time_spent/scrubbed/related/license/models_extra`；新增 `result/verified/contributor_id`；`status` 单字段表达治理（合并 scrubbed）；`hardware/agent_config` 改可选；写入契约从"Agent 写 .md"改为"Agent 交 JSON，系统渲染"。
 
 ---
 

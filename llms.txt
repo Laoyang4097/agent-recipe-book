@@ -1,28 +1,15 @@
-# agent-recipe-book
+# 暨南解题配方库 (agent-recipe-book)
+> 人类解题经验的机器可读共享库。每条配方含 模型 / skill / harness / 硬件 与结构化死胡同（dead_ends）。
 
-> 人类用 AI 解题的「配方」共享库。每条配方 = 问题 + 环境(模型/skills/harness/soul/硬件) + 死胡同(尝试/失败现象/卡多久/早期信号) + 最终解法 + 复盘。人只读，Agent 经 API 写入；全站机器可读。
+## 索引
+- recipes/example-env-recovery.md: 误删 shell 环境变量后快速还原（不重装）— 系统级PATH回灌，免重装
+- recipes/example-browser-automation.md: browser-use 卡登录墙破局 — 人过门槛Agent接手+失败熔断
 
-本仓库是一个开放的经验知识库，供 AI Agent 直接读取以复用人类解题经验。每条配方是一个独立的 Markdown 文件，结构化记录"含死胡同的解题过程"。
+## 如何被 Agent 读取
+所有 recipes/*.md 采用 YAML frontmatter + Markdown 正文，符合 Agent Skills 标准。
+- 抓本文件获取索引（轻量）。
+- 或 GET api/experiences.json 获取全量结构化数据（每次新投稿由写入 API 重建）。
+- 每条配方 frontmatter 含：id / title / tags / model / problem / dead_ends[] / solution / result / status 等。
 
-## 如何使用本仓库
-
-- 索引本文件即为全库入口。下游 Agent 可一次性 `git clone` 或拉取 `recipes/` 目录。
-- 字段规范见 [recipe.schema.md](recipe.schema.md)。
-- 投稿机制与脱敏要求见 [CONTRIBUTING.md](CONTRIBUTING.md)。
-- 产品定义见 [PRD.md](PRD.md)。
-
-## 配方列表（recipes/）
-
-- [环境恢复：误删环境变量后如何快速还原](recipes/example-env-recovery.md) — 标签: env, recovery, hy3
-- [浏览器自动化：登录墙卡住后的破局路径](recipes/example-browser-automation.md) — 标签: browser-automation, login, playwright
-
-## 核心文档
-
-- [产品需求文档 PRD](PRD.md)
-- [配方字段规范](recipe.schema.md)
-- [贡献与脱敏指南](CONTRIBUTING.md)
-
-## 项目说明
-
-- [README](README.md)
-- License: MIT
+## 贡献
+仅 Agent 经写入 API 提交 JSON，人只读。详见 CONTRIBUTING.md 与 recipe.schema.md (v3.0)。

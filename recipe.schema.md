@@ -1,78 +1,175 @@
-# 配方（Recipe）字段规范 v1.0
+# 配方（Recipe）字段规范 v3.0
 
-每条配方是一个独立的 Markdown 文件，存放于 `recipes/` 目录，文件名用 `kebab-case` 并带 `example-` 前缀（示例）或你的命名空间前缀。
+> 本文件是「解题配方库」**唯一权威 Schema 来源**。PRD §7 仅引用此处。
+> 版本：v3.0 ｜ 对齐 Anthropic Agent Skills 开放标准（YAML frontmatter + Markdown 正文）
 
-本规范刻意对齐 **Anthropic Agent Skills** 的开放标准（纯 Markdown、无 SDK 即可被 30+ Agent 产品读取），因此每条配方头部采用 YAML frontmatter。
-
-## 字段定义
-
-```yaml
 ---
-id: recipe-0001                # 全局唯一，建议 recipe-XXXX 自增
-title: 简短描述这条配方解决什么
-tags: [browser-automation, login, playwright]   # 小写连字符，便于聚类
-model: Hy3                     # 解题用的主模型，如 Hy3 / Deepseek-V4.1-flash
-skills: [agent-browser, find-skills]   # 用到的 skill 列表（可空）
-harness: WorkBuddy             # 运行环境/客户端，如 WorkBuddy / Cursor / Claude Code
-hardware:                      # 尽量完整，助复现
-  cpu: Intel i5-10210U
-  gpu: NVIDIA RTX 4060 8GB
-  ram: 8GB
-  os: Windows 10 19045
-contributor: anonymous         # 可填 anonymous / 昵称 / 脱敏后的标识
+
+## 0. 核心设计原则（不可动摇）
+
+1. **单一真值源 = Markdown 文件头部的 YAML frontmatter**。正文 Markdown 仅作人类/Agent 可读的叙事补充，**机器不强制解析正文**。
+2. **死胡同（dead_ends）结构化进 frontmatter 的 YAML 数组**，每条 4 子字段，禁止一句话带过。
+3. **写入契约 = JSON**：贡献者 Agent 经写入 API 提交 JSON，系统渲染为 `.md`（含 frontmatter）并重建 `llms.txt` / `experiences.json`。Agent **不直接写 .md**。
+4. **对齐 Agent Skills**：frontmatter + 正文符合开放标准，可被 30+ Agent 产品直接读取。
+5. **脱敏可审计**：用 `status` 单字段表达治理状态，机器可读。
+
+---
+
+## 1. 字段规范（写入契约 = JSON；渲染后 frontmatter 同构）
+
+| 字段 | 类型 | 必填 | 说明 | 示例 |
+|---|---|---|---|---|
+| `id` | string | ✅ | 全局唯一 kebab-case，建议 `recipe-<短描述>` | `recipe-anti-crawl-hy3` |
+| `title` | string(≤80) | ✅ | 一句话说清解决什么，兼作检索句 | `用 Hy3 破反爬：降频+随机头+住宅代理` |
+| `tags` | string[] | ✅ | ≥1，全小写连字符，用于聚类 | `["crawler","anti-crawl"]` |
+| `model` | string | ✅ | 主模型，白名单：Hy3 / Deepseek-V4.1-flash / 其他 | `Hy3` |
+| `problem` | string | ✅ | 清晰描述卡点与约束，30 秒看懂 | `用 Hy3 写爬虫被封 IP...` |
+| `dead_ends` | array | ✅ | ≥1 条，每条 4 子字段（灵魂） | 见 §2 |
+| `solution` | string | ✅ | 可复用破局步骤 | `降频1req/2s+随机头+住宅代理` |
+| `status` | enum | ✅ | `draft`/`scrubbed`/`published`/`quarantined` | `published` |
+| `contributor_id` | string | 系统生成 | 稳定匿名哈希（如 `anon-7f3a9c`），用于表彰计数 | `anon-7f3a9c` |
+| `created_at` | date | 系统填 | ISO 日期 | `2026-09-23` |
+| `skills` | string[] | ⚠️ | 用到的 skill | `["anti-detect"]` |
+| `harness` | string | ⚠️ | 运行客户端 | `WorkBuddy` |
+| `hardware` | object | ⚠️ | 仅环境相关时填 `{os,cpu,gpu,ram}` | `{os:Win10,cpu:i5,...}` |
+| `agent_config` | string | ⚠️ | 脱敏后 soul/Agent.md 要点，仅影响复现时填 | `角色=采集助手；禁绕robots` |
+| `result` | string | ⚠️ | 实测结论，证明解法真跑通 | `连续抓2h未封` |
+| `retrospective` | string | ⚠️ | 复盘+一句忠告 | `反爬是对抗指纹...` |
+| `verified` | bool | ⚠️ | 是否经第二人/复现验证 | `true` |
+
+**必填(8)**：`id, title, tags, model, problem, dead_ends[], solution, status`
+**条件必填**：`contributor_id`（系统生成）、`created_at`（系统填）
+**可选**：其余带 ⚠️ 字段
+**已砍(相对 v2.0)**：`summary, difficulty, time_spent, scrubbed, related, license, models_extra`
+
+---
+
+## 2. `dead_ends[]` 子结构（每条必含 4 字段）
+
+```json
+{
+  "attempt": "硬改 UA 伪装浏览器",
+  "failure": "仍被 TLS 指纹识别封（JA3 不匹配）",
+  "duration": "40min",
+  "early_signal": "目标站有 TLS 指纹校验，单改 UA 无效"
+}
+```
+
+- `attempt`：你做了什么
+- `failure`：报什么错 / 行为偏离预期的具体表现
+- `duration`：卡了多久（分钟/小时/天）
+- `early_signal`：回头看，哪个早期迹象能让你少走弯路
+
+复杂情况允许 3–5 条，不要省略关键细节。
+
+---
+
+## 3. 完整示例
+
+### 3.1 写入负载（Agent 提交的 JSON）
+
+```json
+{
+  "id": "recipe-anti-crawl-hy3",
+  "title": "用 Hy3 破反爬：避开硬刚UA，降频+随机头+住宅代理",
+  "tags": ["crawler", "anti-crawl", "data-collection"],
+  "model": "Hy3",
+  "problem": "用 Hy3 写 Python 爬虫抓某站，频繁被封 IP，改 UA 和提并发都无效。",
+  "dead_ends": [
+    {"attempt":"硬改 UA 伪装浏览器","failure":"仍被 TLS 指纹识别封（JA3 不匹配）","duration":"40min","early_signal":"目标站有 TLS 指纹校验，单改 UA 无效"},
+    {"attempt":"并发 5→50","failure":"IP 直接拉黑 24h","duration":"10min","early_signal":"无代理池时高并发是红线"}
+  ],
+  "solution": "降频至 1req/2s；随机化 Accept-Language+真实 Referer；住宅代理轮询。",
+  "result": "实测连续抓取 2h 未被封，成功率稳定。",
+  "retrospective": "反爬本质是对抗指纹+行为非单改UA；硬件弱优先降频保活。",
+  "skills": ["anti-detect", "proxy-rotate"],
+  "harness": "WorkBuddy",
+  "hardware": {"os":"Windows 10 22H2","cpu":"i5-10210U","gpu":"集成显卡 UHD","ram":"8GB"},
+  "agent_config": "角色=数据采集助手；禁止绕过 robots；遇敏感数据即停（已脱敏）",
+  "verified": true,
+  "status": "published"
+}
+```
+
+### 3.2 系统渲染后的 `.md`（frontmatter = 上方 JSON 的 YAML 表达）
+
+```markdown
+---
+id: recipe-anti-crawl-hy3
+title: 用 Hy3 破反爬：避开硬刚UA，降频+随机头+住宅代理
+tags: [crawler, anti-crawl, data-collection]
+model: Hy3
+problem: 用 Hy3 写 Python 爬虫抓某站，频繁被封 IP，改 UA 和提并发都无效。
+dead_ends:
+  - attempt: 硬改 UA 伪装浏览器
+    failure: 仍被 TLS 指纹识别封（JA3 不匹配）
+    duration: 40min
+    early_signal: 目标站有 TLS 指纹校验，单改 UA 无效
+  - attempt: 并发 5→50
+    failure: IP 直接拉黑 24h
+    duration: 10min
+    early_signal: 无代理池时高并发是红线
+solution: 降频至 1req/2s；随机化 Accept-Language+真实 Referer；住宅代理轮询。
+result: 实测连续抓取 2h 未被封，成功率稳定。
+retrospective: 反爬本质是对抗指纹+行为非单改UA；硬件弱优先降频保活。
+skills: [anti-detect, proxy-rotate]
+harness: WorkBuddy
+hardware: {os: Windows 10 22H2, cpu: i5-10210U, gpu: 集成显卡 UHD, ram: 8GB}
+agent_config: 角色=数据采集助手；禁止绕过 robots；遇敏感数据即停（已脱敏）
+verified: true
+status: published
+contributor_id: anon-7f3a9c
 created_at: 2026-09-23
-source_conversation: null      # 可选：脱敏后的会话摘要或片段链接
 ---
+
+## 背景与卡点
+（系统可插入叙事，可选，机器不强制解析）
+
+## 死胡同详解 / 解法步骤 / 复盘
+（详见 frontmatter 结构化字段；此处供人深读）
 ```
 
-## 正文结构（Markdown）
+---
 
-正文必须包含以下四级标题，顺序不限但建议一致：
-
-### ## 问题
-清晰描述你原本想解决什么、约束是什么。避免含糊，要让读者 30 秒看懂"卡在哪"。
-
-### ## 环境
-- **模型**：主模型及版本（如 Hy3、Deepseek-V4.1-flash）。
-- **Skills**：用到的 skill（如 `agent-browser`、`find-skills`）。
-- **Harness**：运行客户端（如 WorkBuddy、Cursor）。
-- **Soul / Agent.md**：脱敏后的角色设定要点（**必须洗掉个人标识、真实姓名、专属路径**）。
-- **硬件**：见 frontmatter 的 `hardware` 字段。
-
-### ## 死胡同（重点）
-这是配方最值钱的部分。每个失败尝试用一个子列表，结构化记录：
+## 4. 机器可读架构
 
 ```
-1. 尝试：<你做了什么>
-   - 失败现象：<报什么错 / 行为偏离预期的具体表现>
-   - 卡了多久：<分钟/小时/天>
-   - 本可提前避开的信号：<回头看，哪个早期迹象能让你少走弯路>
+存储层 (JSON 真值)
+   │  写入 API 校验 + 渲染
+   ├─► recipes/<id>.md     (frontmatter=JSON 同构，Agent Skills 可读)
+   ├─► llms.txt            (抽 id/title/tags/solution 一句话索引)
+   └─► api/experiences.json (抽全部 frontmatter 数组，Agent 一次抓取)
+消费 Agent 读 llms.txt 或 experiences.json → 零解析成本得全库
 ```
 
-复杂情况允许 3–5 个死胡同条目，不要省略关键细节。
+## 5. 写入契约与脱敏治理
 
-### ## 最终解法
-给出可复用的具体步骤（命令、配置、Prompt 要点），让后人照做能破局。
+- **提交格式**：Agent 经写入 API 提交 **JSON**（非 .md），降低 YAML 出错面。
+- **预校验**：API 拒绝缺必填 / 类型错 / id 撞车的负载（防污染库）。
+- **两段式脱敏**：① 贡献者 Agent 在生成 JSON 前自检清洗 ② API 落地前正则 + 审计 Agent 复检；均过才 `status: published`，否则 `quarantined`。
+- **contributor_id**：系统对匿名标识/昵称做稳定哈希，使表彰可计数。
+- **status 语义**：`draft`→`scrubbed`→`published`；`quarantined` 隔离待人工。`status=published` 即代表已脱敏可展示。
 
-### ## 复盘
-- 这次为什么能成（与死胡同的对比）。
-- 哪些经验可泛化到其他场景。
-- 给后来者的 1 句忠告。
+## 6. 开放边界（字段级）
 
-## 脱敏红线（写入前必查）
-
-| 必须清洗 | 处理方式 |
+| 公开（全开放） | 清洗（一律不进 JSON） |
 |---|---|
-| 真实姓名、学号、工号 | 替换为 `anonymous` / 昵称 |
-| API Key / Token / 密码 | 一律删除，绝不留痕 |
-| 内网 URL、内部系统地址 | 删除或泛化（如 `internal-portal` ） |
-| 绝对文件路径含用户名 | 改为相对路径或 `<USER>` 占位 |
-| 含他人隐私的聊天原文 | 征得同意或脱敏后引用 |
+| id/title/tags/model/skills/harness | 真名、学号、工号 |
+| 脱敏后的 agent_config | API Key/Token/密码 |
+| hardware（规格非敏感） | 内网 URL、内部系统路径 |
+| problem/dead_ends/solution/result/retrospective | 含他人隐私的聊天原文 |
+| contributor_id（匿名哈希）/tags | 文件系统绝对路径（C:\Users\...） |
 
-硬件规格（CPU/GPU/RAM/OS）**不是敏感信息**，请完整保留——它是可复现性的关键。
+## 7. 验收标准（Schema 可验收）
 
-## 兼容性说明
+1. 任意一条配方 JSON 能通过写入 API 校验并被渲染为合规 .md + 进入 llms.txt/json。
+2. `experiences.json` 可被 `curl` 一次拉全库，字段解析零报错。
+3. 缺必填字段的负载被 API 拒绝（不污染库）。
+4. `status≠published` 的配方不出现在公开 llms.txt。
+5. 真实试填 ≥3 条，证明字段"好填、不歧义"。
 
-- 头部 frontmatter 供机器解析；正文 Markdown 供人类与 Agent 共读。
-- 遵循 Agent Skills 约定后，本仓库的 `recipes/*.md` 可被直接当作 skill 引用，无需改写。
-- `llms.txt` 会把所有配方索引给外部 Agent。
+## 8. 版本变更
+
+- v1.0（初版）：frontmatter 索引 + 正文结构化，含 source_conversation。
+- v2.0（评估版）：加 difficulty/time_spent/status/scrubbed/license/related，正文 `### 死胡同 N` 解析。
+- **v3.0（本版）**：单一真值源=frontmatter；死胡同进 YAML 数组；写入契约=JSON；砍 7 冗余字段；补 result/verified/contributor_id；status 单字段治理；hardware/agent_config 改可选。
