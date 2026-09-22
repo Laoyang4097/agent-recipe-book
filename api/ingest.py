@@ -151,7 +151,9 @@ def rebuild():
     # 重建 experiences.json
     os.makedirs(os.path.dirname(EXP_JSON), exist_ok=True)
     with open(EXP_JSON, "w", encoding="utf-8") as f:
-        json.dump(recipes, f, ensure_ascii=False, indent=2)
+        # default=str 兜底：YAML 可能把 created_at 等解析为 date/datetime 对象，
+        # json 无法直接序列化，统一转字符串避免 rebuild 中途崩溃。
+        json.dump(recipes, f, ensure_ascii=False, indent=2, default=str)
     print(f"✅ 已重建 {EXP_JSON}（{len(recipes)} 条）")
     # 重建 llms.txt（仅 published）
     pub = [r for r in recipes if r.get("status") == "published"]

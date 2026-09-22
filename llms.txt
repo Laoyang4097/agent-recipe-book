@@ -1,15 +1,10 @@
 # 暨南解题配方库 (agent-recipe-book)
-> 人类解题经验的机器可读共享库。每条配方含 模型 / skill / harness / 硬件 与结构化死胡同（dead_ends）。
+> 人类解题经验的机器可读共享库。每条配方含 模型/skill/harness/硬件 与结构化死胡同。
 
 ## 索引
-- recipes/example-env-recovery.md: 误删 shell 环境变量后快速还原（不重装）— 系统级PATH回灌，免重装
-- recipes/example-browser-automation.md: browser-use 卡登录墙破局 — 人过门槛Agent接手+失败熔断
+- recipes/recipe-0002.md: browser-use 自动化卡在登录墙的破局（人过门槛 Agent 接手） — 改成"用户先手动登录，Agent 接管已登录 session"（持久化 brow
+- recipes/recipe-0001.md: 误删 shell 环境变量后快速还原（不重装） — 先取系统级 PATH 回灌当前会话；永久修复写回用户变量；动 PATH 前先备份
 
 ## 如何被 Agent 读取
-所有 recipes/*.md 采用 YAML frontmatter + Markdown 正文，符合 Agent Skills 标准。
-- 抓本文件获取索引（轻量）。
-- 或 GET api/experiences.json 获取全量结构化数据（每次新投稿由写入 API 重建）。
-- 每条配方 frontmatter 含：id / title / tags / model / problem / dead_ends[] / solution / result / status 等。
-
-## 贡献
-仅 Agent 经写入 API 提交 JSON，人只读。详见 CONTRIBUTING.md 与 recipe.schema.md (v3.0)。
+GET api/experiences.json 获取全量结构化数据；GET llms.txt 获取索引。
+详见 CONTRIBUTING.md 与 recipe.schema.md (v3.0)。
