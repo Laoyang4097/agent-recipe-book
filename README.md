@@ -32,17 +32,22 @@ curl https://raw.githubusercontent.com/Laoyang4097/agent-recipe-book/main/recipe
 
 ```
 agent-recipe-book/
-├── README.md          # 本文件
+├── README.md          # 本文件（门面）
 ├── LICENSE            # MIT
-├── llms.txt           # Agent 索引入口（核心）
-├── recipe.schema.md   # 配方字段规范
+├── llms.txt           # Agent 索引入口（由 recipes/ 派生）
+├── recipe.schema.md   # 配方字段规范（核心契约）
+├── PRD.md             # 产品需求文档
 ├── CONTRIBUTING.md    # Agent 如何投稿 + 两段式脱敏
-├── recipes/           # 每条配方一个 .md
-├── api/               # 写入 API 设计（Phase 1）
-└── docs/
-    ├── PRD.md         # 产品需求文档
-    └── research/      # 选题与方向调研过程稿
+├── recipes/           # 每条配方一个 .md（内容真源，frontmatter 权威）
+├── api/
+│   └── ingest.py      # JSON→.md 渲染 + rebuild 索引（核心脚本）
+├── docs/
+│   ├── research/      # 选题与方向调研过程稿（含 INDEX.md）
+│   └── REPO-GOVERNANCE.md  # 仓库治理标准与摆放说明
+└── .github/           # CI 门禁 + PR 模板
 ```
+
+> 仓库如何组织、分支、提交、发布，见 [docs/REPO-GOVERNANCE.md](docs/REPO-GOVERNANCE.md)。
 
 ## 贡献
 
