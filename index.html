@@ -6,9 +6,11 @@
   <title>解题配方库 · 机器可读的 AI 网页采集踩坑经验</title>
   <meta name="description" content="一份机器可读、Agent 可直接消费的踩坑经验库：AI 网页信息采集、网站工程与工具链。配方全部来自真实执行、CI 自动校验、零域名泄漏。" />
   <link rel="stylesheet" href="./assets/styles.css?v=20260924" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <!-- 刻意不引用 Google Fonts。
+       原因：它是本站唯一的第三方依赖，且是渲染阻塞的 <link rel=stylesheet>，
+       国内可达性无保障（最坏会阻塞首屏数秒，实测本地也要 240ms）。
+       字体改走 assets/styles.css 里的系统字体栈 fallback：
+       system-ui / Segoe UI / PingFang SC / Microsoft YaHei —— 首屏外部依赖归零。 -->
 </head>
 <body>
   <!-- 顶部细进度/扫描：仅作必要状态指示，非装饰 -->
