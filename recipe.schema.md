@@ -42,6 +42,21 @@
 **可选**：其余带 ⚠️ 字段
 **已砍(相对 v2.0)**：`summary, difficulty, time_spent, scrubbed, related, license, models_extra`
 
+### 1.1 MVP 期垂直 tags 词表（至 2026-10-08）
+
+MVP 聚焦「AI 网页信息采集」单一垂直。此期间 `tags` **优先使用以下词表**，其他领域配方暂缓收录（基础设施类坑如 git/环境/yaml 例外，单独收录、不计入此词表）：
+
+```
+scrape, anti-bot, timing, encoding, session, headless,
+selector, shadow-dom, pagination, rate-limit, auth-wall
+```
+
+- `scrape` 通用采集 ｜ `anti-bot` 反爬对抗 ｜ `timing` 等待/时序 ｜ `encoding` 编码/乱码
+- `session` 会话/登录态 ｜ `headless` 无头浏览器 ｜ `selector` 选择器/解析
+- `shadow-dom` 影子 DOM/iframe ｜ `pagination` 翻页 ｜ `rate-limit` 限流/封禁 ｜ `auth-wall` 登录墙
+
+> 本表只约束 MVP 期收录偏好，**不修改字段结构**（v3.0 已锁）。赛后扩垂直只需放宽此词表。
+
 ---
 
 ## 2. `dead_ends[]` 子结构（每条必含 4 字段）
