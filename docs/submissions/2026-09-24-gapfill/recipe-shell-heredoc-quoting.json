@@ -1,0 +1,36 @@
+{
+  "id": "recipe-shell-heredoc-quoting",
+  "title": "bash heredoc 里的嵌套引号会把脚本绞碎",
+  "tags": [
+    "shell",
+    "tooling"
+  ],
+  "model": "Deepseek-V4.1-Flash",
+  "problem": "在 bash 里用 heredoc 把一段 Python 脚本喂给解释器执行，脚本里有引号、模板字符串与 f-string，执行时报语法错误或内容被 shell 提前展开。",
+  "dead_ends": [
+    {
+      "attempt": "用 heredoc 内嵌带引号与 $ 的脚本交给解释器执行",
+      "failure": "含嵌套引号与模板字符串时解析出错、脚本被拆断；报错指向不明确，调试成本高",
+      "duration": "15min",
+      "early_signal": "脚本越复杂，heredoc 的引号叠加层数越多，出错面呈指数上升"
+    },
+    {
+      "attempt": "反复微调转义（加反斜杠、换引号种类）",
+      "failure": "调好这一处又崩在下一处，陷入改一个错一个的循环",
+      "duration": "20min",
+      "early_signal": "当修复成本随脚本复杂度上涨时，该换方案而不是继续转义"
+    }
+  ],
+  "solution": "不再把长脚本塞进 heredoc。改为把脚本写入临时文件（用写文件工具而非 echo/cat），再用解释器执行该文件：内容不经过 shell 解析，引号与 $ 全部原样传递。需要断言与失败退出的脚本尤其适合。",
+  "result": "改为「先写文件再执行」后，包含引号、模板字符串、f-string 与断言的长脚本一次跑通。",
+  "retrospective": "shell 是最好的胶水，但不是代码容器。超过十几行的脚本就该落地成文件再执行 —— 省下的是转义调试时间，换来的是可复用与可审查。",
+  "harness": "WorkBuddy",
+  "hardware": {
+    "os": "Windows 10 22H2",
+    "cpu": "i5-10210U",
+    "gpu": "集成显卡 UHD",
+    "ram": "8GB"
+  },
+  "verified": true,
+  "status": "published"
+}

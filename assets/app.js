@@ -27,7 +27,8 @@
     { key: "all", label: "全部", match: () => true },
     { key: "collect", label: "采集", match: (r) => /^recipe-py-/.test(r.id) },
     { key: "web", label: "网站工程", match: (r) => /^recipe-web-/.test(r.id) },
-    { key: "infra", label: "工具链", match: (r) => /^recipe-(git|yaml)-/.test(r.id) },
+    // 兜底：既不是采集(Python)也不是网站工程的，一律归工具链/基础设施
+    { key: "infra", label: "工具链", match: (r) => !/^recipe-(py|web)-/.test(r.id) },
   ];
   let activeGroup = "all";
 

@@ -1,5 +1,91 @@
 [
   {
+    "id": "recipe-gh-pages-pat-scope",
+    "title": "fine-grained PAT 开不了 GitHub Pages：权限逐项授予，缺 Pages 就是 403",
+    "tags": [
+      "gh-pages",
+      "tooling",
+      "ci"
+    ],
+    "model": "Deepseek-V4.1-Flash",
+    "problem": "站点文件已推上 main，想用 API 顺手把 GitHub Pages 打开、省掉手动操作，结果被拒。",
+    "dead_ends": [
+      {
+        "attempt": "用现有 fine-grained PAT 调 POST /repos/{owner}/{repo}/pages 创建 Pages 站点",
+        "failure": "403 Resource not accessible by personal access token —— 该 PAT 只有 Contents + Workflows，没勾 Pages",
+        "duration": "5min",
+        "early_signal": "fine-grained PAT 权限逐项授予，不会因为「能推代码」就顺带能改 Pages 设置"
+      },
+      {
+        "attempt": "先 GET /repos/{owner}/{repo}/pages 确认站点是否已存在",
+        "failure": "返回 404 Not Found（表示尚未启用），容易被误读成「仓库路径写错」或「PAT 失效」",
+        "duration": "3min",
+        "early_signal": "Pages 未启用时 GET 就是 404，这是正常语义而不是报错"
+      }
+    ],
+    "solution": "两条路：① 给该 fine-grained PAT 追加 Pages: Read and write 权限，再用 API 创建；② 直接在仓库 Settings → Pages 手动设置（Source: Deploy from a branch → Branch: main / 目录: /(root) → Save），零权限配置、一次到位。",
+    "result": "手动开启后站点约 1 分钟上线；同一 PAT 的 Contents 推送流程不受影响。",
+    "retrospective": "fine-grained PAT 是最小授权、逐项勾选的模型。遇到 403 先分清是「没权限」还是「被限流」：前者的报文是 Resource not accessible，后者才带 rate limit 字样。",
+    "harness": "WorkBuddy",
+    "hardware": {
+      "os": "Windows 10 22H2",
+      "cpu": "i5-10210U",
+      "gpu": "集成显卡 UHD",
+      "ram": "8GB"
+    },
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-24"
+  },
+  {
+    "id": "recipe-git-api-push-stale-ref",
+    "title": "走 API 推送后本地显示 ahead N：本地 origin 指针的陈旧假象",
+    "tags": [
+      "git",
+      "tooling",
+      "ci"
+    ],
+    "model": "Deepseek-V4.1-Flash",
+    "problem": "用 Git Data API 直接向远端提交后，本地 git status 一直显示领先远端若干个提交，看起来像「还有东西没推上去」。",
+    "dead_ends": [
+      {
+        "attempt": "按 git status 的 ahead 计数判断本地还有未推送内容",
+        "failure": "误导性结论：API 推送不会更新本地远端跟踪引用，ahead 是假象，内容其实早已同步",
+        "duration": "15min",
+        "early_signal": "推送走的是 API 而不是 git push，本地引用自然不会被刷新"
+      },
+      {
+        "attempt": "在受限网络里直接 git fetch 想把指针拉回来",
+        "failure": "目标站点被网络策略节流，fetch 走不通",
+        "duration": "10min",
+        "early_signal": "推送能通不代表 fetch 能通：两者可能走不同域名（API 域 vs 站点域），受限程度不同"
+      },
+      {
+        "attempt": "拿远端 commit 的 SHA 作为本地 diff 基准",
+        "failure": "fatal: bad object —— 远端 commit 不在本地对象库里，git 无法解析",
+        "duration": "10min",
+        "early_signal": "本地没有的对象不能当 diff 基准；应改用本地已有的父提交"
+      }
+    ],
+    "solution": "① 用「内容比对」而非「引用计数」判断同步：逐文件对比本地内容与远端 API 返回内容，或对比 tree SHA；② diff 基准改用本地 HEAD~1 等本地存在的提交；③ 网络恢复后在正常网络执行一次 git fetch && git reset --hard origin/main 把指针对齐。",
+    "result": "内容层面确认本地与远端零差异（本地有远端无 = 无、远端有本地无 = 无）；推送脚本改为运行时动态获取远端 SHA 作父提交，不再依赖本地引用。",
+    "retrospective": "git 的本地引用是缓存而非真相。绕过 git 推送时本地状态会失真 —— 判断同步与否要看内容，不要看计数器。",
+    "harness": "WorkBuddy",
+    "hardware": {
+      "os": "Windows 10 22H2",
+      "cpu": "i5-10210U",
+      "gpu": "集成显卡 UHD",
+      "ram": "8GB"
+    },
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-24"
+  },
+  {
     "id": "recipe-git-pat-push",
     "title": "用 fine-grained PAT 推 GitHub：Bearer 头被 git 忽略，必须 URL 内嵌 token 当 Basic Auth",
     "tags": [
@@ -42,6 +128,64 @@
     "status": "published",
     "seed": true,
     "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-23"
+  },
+  {
+    "id": "recipe-managed-python-env-pitfalls",
+    "title": "在 WorkBuddy 托管 Python 环境跑依赖脚本的坑（缺包 / 丢 git 身份 / cwd 不持久 / YAML 日期序列化）",
+    "tags": [
+      "python",
+      "venv",
+      "git",
+      "workbuddy",
+      "yaml",
+      "ci-cd"
+    ],
+    "model": "Agent+managed Python 3.13.12 (WorkBuddy 沙箱)",
+    "problem": "要在 WorkBuddy 沙箱里跑一个 Python 脚本（项目里的 api/ingest.py，需要 pyyaml 解析 frontmatter），并把改动提交推到 GitHub。结果连踩几个环境坑：脚本跑不起来、commit 被拒、路径解析错位、JSON 序列化崩。",
+    "dead_ends": [
+      {
+        "attempt": "直接 `python api/ingest.py rebuild`，指望 managed python 已带 pyyaml",
+        "failure": "ImportError: No module named yaml，rebuild 直接退出，experiences.json 没生成",
+        "duration": "2min",
+        "early_signal": "托管环境默认只有标准库，第三方包要先装；报错第一行就说了"
+      },
+      {
+        "attempt": "装完 pyyaml 后直接 `git commit`，没想身份问题",
+        "failure": "fatal: Author identity unknown，commit 被拒",
+        "duration": "1min",
+        "early_signal": "沙箱每次新会话 git 全局身份会丢，commit 前先给本仓库设局部 user.name/email"
+      },
+      {
+        "attempt": "用相对路径 `api/ingest.py` 跑，以为 cwd 还停在仓库目录",
+        "failure": "can't open file '.../api/ingest.py'：路径解析到了工作区根而非子目录",
+        "duration": "3min",
+        "early_signal": "Bash 工具的 cwd 不保证跨调用持久，脚本一律用绝对路径或先 cd 到仓库根"
+      },
+      {
+        "attempt": "装好 pyyaml 跑 rebuild，以为这次稳了",
+        "failure": "json.dump 抛 TypeError: Object of type date is not JSON serializable，experiences.json 只写一半(2066字节残档)",
+        "duration": "5min",
+        "early_signal": "YAML 把 `created_at: 2026-09-22` 解析成 date 对象，json 无法直接序列化；render/parse 后给 json.dump 加 default=str 兜底"
+      }
+    ],
+    "solution": "① 建隔离 venv 装依赖：`python -m venv .../envs/default && .../Scripts/pip install pyyaml`；② 给本仓库设局部 git 身份 `git config user.name/user.email`（仅本仓库，不污染全局）；③ 所有脚本调用用绝对路径或先 `cd` 到仓库根；④ 在 json.dump 加 `default=str` 兜底 YAML 日期对象。最终 `ingest.py rebuild` 正常生成 experiences.json + llms.txt，commit + PAT 内嵌 push 成功。",
+    "result": "ingest 闭环完整跑通：提交 JSON → 渲染 .md → 重建索引（experiences.json 含 3 条、llms.txt 公开 3 条），并已 push 到 GitHub main。",
+    "retrospective": "托管/隔离 Python 环境的第一性原理：标准库之外啥都没有，依赖要先显式装；git 身份、cwd 这些'我以为还在'的状态在沙箱会话间并不持久。把它们当'每次都要显式初始化'，而不是'应该已经在'。",
+    "skills": [
+      "bash",
+      "git",
+      "python-venv"
+    ],
+    "harness": "WorkBuddy agentic Bash + managed Python 3.13.12",
+    "hardware": {
+      "python": "3.13.12 managed",
+      "os": "win32 (Git Bash)"
+    },
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-47856d",
     "created_at": "2026-09-23"
   },
   {
@@ -161,6 +305,51 @@
     "seed": true,
     "contributor_id": "anon-2f183a",
     "created_at": "2026-09-23"
+  },
+  {
+    "id": "recipe-py-highlevel-tool-fake-pitfall",
+    "title": "用高层抓取工具产出的坑多半是假的：11 条配方被整批拒收",
+    "tags": [
+      "scrape",
+      "tooling"
+    ],
+    "model": "Deepseek-V4.1-Flash",
+    "problem": "用高层 WebFetch 工具批量抓公开页来生成「采集踩坑」配方。产出的 11 条结构完整、看着也像模像样，但复盘时发现它们根本不能代表真实采集场景。",
+    "dead_ends": [
+      {
+        "attempt": "用高层 WebFetch 工具批量抓公开页，把返回结果里的异常当作「目标站的坑」写成配方",
+        "failure": "11 条整体不合格：死胡同大多是 WebFetch 工具自身的限制（自动解码、自动转 markdown、无头不可控），换成真实 HTTP 客户端根本复现不了",
+        "duration": "复盘时整批发现（非单点阻塞）",
+        "early_signal": "若一条「坑」换掉工具就消失，那它是工具的坑，不是目标站的坑"
+      },
+      {
+        "attempt": "接受工具返回的「已解码 / 已转 markdown」内容，直接当原始响应来分析",
+        "failure": "基于二次加工后的内容得出的结论全部失真（误判编码问题、误判反爬行为）",
+        "duration": "复盘时整批发现",
+        "early_signal": "高层工具会替你吃掉底层细节，而这些细节恰恰是采集坑的全部内容"
+      },
+      {
+        "attempt": "配方 frontmatter 统一标注 model 为 Hy3",
+        "failure": "与实际执行者不符，属事实性错误标注",
+        "duration": "复盘时发现",
+        "early_signal": "model 这类元字段要如实填写实际执行者，不能沿用模板占位值"
+      }
+    ],
+    "solution": "弃用高层工具产配方。改用真实 Python requests 脚本逐条重跑采集任务，基于原始响应（状态码 / 响应头 / 字节流）判定坑点；原 11 条整批移入 docs/deprecated/webfetch-noise/ 留痕而非静默删除，另产出 12 条可复现配方。",
+    "result": "重跑产出的 12 条配方全部可用真实 requests 复现；被拒的 11 条归档保留，可追溯「哪些被否掉、为什么否掉」。",
+    "retrospective": "用高层封装工具采集，采到的是「工具层的坑」而非「目标站点的坑」。要产出可直接复用的采集经验，必须用裸 HTTP 客户端拿到未经二次加工的原始响应 —— 否则你记录的只是你所依赖的那个工具的行为。",
+    "harness": "WorkBuddy",
+    "hardware": {
+      "os": "Windows 10 22H2",
+      "cpu": "i5-10210U",
+      "gpu": "集成显卡 UHD",
+      "ram": "8GB"
+    },
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-24"
   },
   {
     "id": "recipe-py-html-entities-not-decoded",
@@ -522,6 +711,45 @@
     "created_at": "2026-09-23"
   },
   {
+    "id": "recipe-shell-heredoc-quoting",
+    "title": "bash heredoc 里的嵌套引号会把脚本绞碎",
+    "tags": [
+      "shell",
+      "tooling"
+    ],
+    "model": "Deepseek-V4.1-Flash",
+    "problem": "在 bash 里用 heredoc 把一段 Python 脚本喂给解释器执行，脚本里有引号、模板字符串与 f-string，执行时报语法错误或内容被 shell 提前展开。",
+    "dead_ends": [
+      {
+        "attempt": "用 heredoc 内嵌带引号与 $ 的脚本交给解释器执行",
+        "failure": "含嵌套引号与模板字符串时解析出错、脚本被拆断；报错指向不明确，调试成本高",
+        "duration": "15min",
+        "early_signal": "脚本越复杂，heredoc 的引号叠加层数越多，出错面呈指数上升"
+      },
+      {
+        "attempt": "反复微调转义（加反斜杠、换引号种类）",
+        "failure": "调好这一处又崩在下一处，陷入改一个错一个的循环",
+        "duration": "20min",
+        "early_signal": "当修复成本随脚本复杂度上涨时，该换方案而不是继续转义"
+      }
+    ],
+    "solution": "不再把长脚本塞进 heredoc。改为把脚本写入临时文件（用写文件工具而非 echo/cat），再用解释器执行该文件：内容不经过 shell 解析，引号与 $ 全部原样传递。需要断言与失败退出的脚本尤其适合。",
+    "result": "改为「先写文件再执行」后，包含引号、模板字符串、f-string 与断言的长脚本一次跑通。",
+    "retrospective": "shell 是最好的胶水，但不是代码容器。超过十几行的脚本就该落地成文件再执行 —— 省下的是转义调试时间，换来的是可复用与可审查。",
+    "harness": "WorkBuddy",
+    "hardware": {
+      "os": "Windows 10 22H2",
+      "cpu": "i5-10210U",
+      "gpu": "集成显卡 UHD",
+      "ram": "8GB"
+    },
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-24"
+  },
+  {
     "id": "recipe-web-cjk-substring-search",
     "title": "中文搜索用整串 includes 匹配：自然语言查询必然 0 结果",
     "tags": [
@@ -639,6 +867,52 @@
     "created_at": "2026-09-24"
   },
   {
+    "id": "recipe-web-deploy-cache-stale",
+    "title": "部署成功但用户看不到新功能：CDN 与浏览器缓存的叠加",
+    "tags": [
+      "deploy",
+      "tooling",
+      "web-verify"
+    ],
+    "model": "Deepseek-V4.1-Flash",
+    "problem": "功能已推送、CI 通过、远端源码确认是新版，但用户打开线上站点仍看不到新加的那排分类条。",
+    "dead_ends": [
+      {
+        "attempt": "怀疑部署失败，重新推一次",
+        "failure": "重新推送无效 —— 线上产物其实早就是新版",
+        "duration": "10min",
+        "early_signal": "先验证线上产物（curl 看源码 + 无头浏览器看渲染），再怀疑部署"
+      },
+      {
+        "attempt": "只检查远端仓库里的源码文件",
+        "failure": "源码是新版，但用户浏览器加载的仍是缓存的旧 HTML/JS —— 源码正确不能证明用户看到的是新版",
+        "duration": "5min",
+        "early_signal": "「仓库是新的」与「用户拿到的是新的」之间还隔着 CDN 与浏览器缓存"
+      },
+      {
+        "attempt": "凭「应该有缓存」直接回复用户去刷新",
+        "failure": "没有证据支撑，用户未必信服；若真不是缓存问题就会误判方向",
+        "duration": "5min",
+        "early_signal": "先把结论坐实：curl 验证线上 HTML 是否含新元素、无头浏览器 dump DOM 看是否真的渲染出来"
+      }
+    ],
+    "solution": "① curl 检查线上 index.html 是否含新元素、静态资源是否 200；② 无头浏览器 --dump-dom 打开线上 URL，确认新元素真的渲染出来（排除 JS 报错）；③ 用时间线解释：用户开启 Pages 时部署的是上一版，静态托管对 HTML 有约 10 分钟 CDN 缓存，浏览器也缓存了旧 HTML/JS；④ 让用户 Ctrl+F5 硬刷新或带查询参数访问；⑤ 加固：给 CSS/JS 引用加版本参数（如 ?v=YYYYMMDD），避免「HTML 是新的、JS 是旧的」不一致。",
+    "result": "实测确认线上已是新版（HTML 含新元素、DOM 渲染出完整分类条），用户 Ctrl+F5 后立即看到；此后静态资源带版本号，改版后浏览器自动拉新。",
+    "retrospective": "「我推上去了」不等于「用户看到了」。线上排查分三层：仓库产物（源码对不对）→ CDN 边缘（分发到没到）→ 浏览器（拿的是不是新的）。跳过前两层直接让用户刷新，是碰运气。",
+    "harness": "WorkBuddy",
+    "hardware": {
+      "os": "Windows 10 22H2",
+      "cpu": "i5-10210U",
+      "gpu": "集成显卡 UHD",
+      "ram": "8GB"
+    },
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-24"
+  },
+  {
     "id": "recipe-web-desktop-clip-mistaken-mobile",
     "title": "把「桌面布局的左半被裁」误认为「移动端渲染」",
     "tags": [
@@ -664,6 +938,45 @@
     "solution": "一个诊断 wrapper 只测一个宽度；若必须复用，每次截图前显式重置 iframe 宽度并等待重排，且在报告里输出当前 clientWidth 作为自证。",
     "result": "改为单宽度 wrapper 后，390px 下的真实渲染显示标题两行完整、胶囊五行完整、导航含 GitHub 按钮，全部正常。",
     "retrospective": "当「截图看起来坏了」时，先怀疑测量装置，再怀疑产品代码。本次 5 次视觉 bug 报告里有 3 次是装置问题。",
+    "harness": "WorkBuddy",
+    "hardware": {
+      "os": "Windows 10 22H2",
+      "cpu": "i5-10210U",
+      "gpu": "集成显卡 UHD",
+      "ram": "8GB"
+    },
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-24"
+  },
+  {
+    "id": "recipe-web-dumpdom-iframe-blind",
+    "title": "--dump-dom 只给主文档：iframe 里的内容一律拿不到",
+    "tags": [
+      "web-verify",
+      "tooling"
+    ],
+    "model": "Deepseek-V4.1-Flash",
+    "problem": "用无头浏览器 --dump-dom 做自动化校验，想读取被测页面的 DOM，结果输出里只有外层包装页，被测页面的内容全空。",
+    "dead_ends": [
+      {
+        "attempt": "把被测页面放进 iframe，再对包装页执行 --dump-dom 并搜索被测页面的元素",
+        "failure": "输出只有包装页自己的 DOM，iframe 内部文档一概不出现 —— dump-dom 不递归进 iframe",
+        "duration": "10min",
+        "early_signal": "dump 出来的文件明显偏小，且只有外层结构"
+      },
+      {
+        "attempt": "以为是页面还没渲染完，加大等待时间",
+        "failure": "等再久也一样 —— 这是 dump-dom 的作用域限制，与加载时机无关",
+        "duration": "5min",
+        "early_signal": "输出体量稳定说明内容本身就取不到，不是「还没出来」"
+      }
+    ],
+    "solution": "两条路：① 要拿被测页面的 DOM，就直接对它本身 dump，不要套 iframe；② 若必须用 iframe 隔离视口（如强制移动端宽度），则在包装页里用脚本读取 iframe.contentDocument、把结果写进自身的 DOM，再 dump 包装页 —— 等于让脚本去做跨文档取样。",
+    "result": "改为在包装页内用 contentDocument 取样并写入报告节点后，dump 一次即可拿到被测页面的分类条、卡片数、按钮文案等全部校验项。",
+    "retrospective": "无头浏览器的各类「取内容」能力都有作用域边界（主文档 / 含 iframe / 渲染后快照）。用错作用域时的表现是静默地少给东西，而不是报错 —— 所以要养成核对输出体量与结构完整性的习惯。",
     "harness": "WorkBuddy",
     "hardware": {
       "os": "Windows 10 22H2",
@@ -1027,6 +1340,45 @@
     "solution": "① 显式控制滚动行为：读取 prefers-reduced-motion，reduce 时用 behavior:'auto'，否则 'smooth'，不依赖 CSS 传递；② 落点提示改为始终执行 —— 它是纯颜色脉冲、无任何位移，不构成前庭刺激，反而是位移被降级后的必要定位补偿；③ 在 reduced-motion 媒体查询段里为它开例外，否则会被全局的 animation:none 一起禁掉。",
     "result": "实测落点提示在 120ms 时 class=true 正常触发；在 reduce=true 环境下用户也能明确看到结果落在哪里。",
     "retrospective": "尊重 prefers-reduced-motion 不等于什么都不做。要区分「位移类动画」（该禁）与「颜色/透明度变化」（可留），后者往往是前者被降级后的必要补偿。",
+    "harness": "WorkBuddy",
+    "hardware": {
+      "os": "Windows 10 22H2",
+      "cpu": "i5-10210U",
+      "gpu": "集成显卡 UHD",
+      "ram": "8GB"
+    },
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-24"
+  },
+  {
+    "id": "recipe-web-subview-refresh-miss",
+    "title": "切换筛选维度后局部视图不刷新：render() 里漏了 renderTags()",
+    "tags": [
+      "frontend",
+      "tooling"
+    ],
+    "model": "Deepseek-V4.1-Flash",
+    "problem": "给页面加了「领域分类」一级筛选后，点分类时卡片数量正确变了，但下方那排标签胶囊还是全部领域的，没跟着换。",
+    "dead_ends": [
+      {
+        "attempt": "在分类点击处理里调用 render() 重建页面",
+        "failure": "列表正确刷新（卡片 29 → 15），但标签胶囊纹丝不动 —— 因为 render() 只负责列表与反馈条，实现里并不包含 renderTags()",
+        "duration": "20min",
+        "early_signal": "一个「总刷新」函数未必真的覆盖所有局部视图，要看它的实现范围"
+      },
+      {
+        "attempt": "怀疑事件没绑定或点击没生效",
+        "failure": "分类按钮的 active 态与列表都正确变了，说明点击确实生效，问题只在某一个子视图没被重建",
+        "duration": "10min",
+        "early_signal": "部分生效 + 部分不生效 = 局部刷新遗漏，而非事件问题"
+      }
+    ],
+    "solution": "在分类切换的处理里显式补调 renderTags()，并在代码里加注释写明「render() 不负责它」，防止后人误删；使标签按当前领域重新统计与渲染。",
+    "result": "切换后标签正确变为该领域的 12 个（frontend/web-verify/headless/…），不再残留采集类标签；注入脚本实测确认。",
+    "retrospective": "多个子视图共享一个「总刷新」入口时，要么让它真正覆盖全部子视图，要么在每个变更点显式列出要刷新的子视图 —— 隐式假设「render 会管」正是漏刷的来源。",
     "harness": "WorkBuddy",
     "hardware": {
       "os": "Windows 10 22H2",

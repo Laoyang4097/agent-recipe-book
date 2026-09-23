@@ -15,7 +15,7 @@
 |---|---|---|
 | `example-env-recovery.md` | `recipe-0001` | PowerShell 环境变量还原——展示"会话级 vs 系统级 PATH"的死胡同写法 |
 | `example-browser-automation.md` | `recipe-0002` | browser-use 卡登录墙——展示"人过门槛、Agent 接手"的护栏思路 |
-| `recipe-managed-python-env-pitfalls.md` | `recipe-managed-python-env-pitfalls` | 托管 Python 环境跑依赖脚本的坑（缺包 / 丢 git 身份 / cwd / YAML 日期序列化）。**注：这是一条真实的"基础设施类"坑**（CONTRIBUTING §1 允许 infra pits 收录），此处仅作格式示例留档；若初赛后想纳入正式库，可移回 `recipes/` 并走投稿流程。 |
+| ~~`recipe-managed-python-env-pitfalls.md`~~ | `recipe-managed-python-env-pitfalls` | **已于 2026-09-24 移回 `recipes/` 正式收录**。理由：它是真实的"基础设施类"坑（托管 Python 环境——缺包 / 丢 git 身份 / cwd 不持久 / YAML 日期序列化），复盘确认 `dead_ends` 四要素齐全、可复现，按 `CONTRIBUTING` §1 的 infra 例外入库。此处保留条目以便追溯它与示例的关系。 |
 
 ## 怎么用
 

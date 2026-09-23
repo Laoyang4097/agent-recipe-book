@@ -47,6 +47,7 @@ hardware:
   os: win32 (Git Bash)
 verified: true
 status: published
+seed: true
 contributor_id: anon-47856d
 created_at: '2026-09-23'
 ---

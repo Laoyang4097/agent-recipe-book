@@ -2,10 +2,14 @@
 > 人类解题经验的机器可读共享库。每条配方含 模型/skill/harness/硬件 与结构化死胡同。
 
 ## 索引
+- recipes/recipe-gh-pages-pat-scope.md: fine-grained PAT 开不了 GitHub Pages：权限逐项授予，缺 Pages 就是 403 — 两条路：① 给该 fine-grained PAT 追加 Pages: Read
+- recipes/recipe-git-api-push-stale-ref.md: 走 API 推送后本地显示 ahead N：本地 origin 指针的陈旧假象 — ① 用「内容比对」而非「引用计数」判断同步：逐文件对比本地内容与远端 API 返
 - recipes/recipe-git-pat-push.md: 用 fine-grained PAT 推 GitHub：Bearer 头被 git 忽略，必须 URL 内嵌 token 当 Basic Auth — ① git smart-HTTP 用 Basic Auth，Bearer 头无效
+- recipes/recipe-managed-python-env-pitfalls.md: 在 WorkBuddy 托管 Python 环境跑依赖脚本的坑（缺包 / 丢 git 身份 / cwd 不持久 / YAML 日期序列化） — ① 建隔离 venv 装依赖：`python -m venv .../envs/
 - recipes/recipe-py-antibot-stop-on-hit.md: 反爬遇即停：requests 默认 UA 撞 403+JS/DataDome 挑战与 Cloudflare 403，命中即弃、零绕过 — 可复用步骤：① 抓取任何站点第一条请求就用 try/except 包住，并显式 
 - recipes/recipe-py-content-encoding-double-decode.md: Content-Encoding 静默解压：requests 已自动解 gzip/deflate，手动再解一次即崩；br 未装库则静默乱码 — 可跑要点：① 默认别手动解压——requests 会自动处理 gzip/defl
 - recipes/recipe-py-encoding-mojibake.md: requests 抓中文站默认 r.encoding=ISO-8859-1 致乱码，用 apparent_encoding/content.decode 修复 — 别信 r.encoding。可跑要点：① 先看响应头是否带 charset；无 
+- recipes/recipe-py-highlevel-tool-fake-pitfall.md: 用高层抓取工具产出的坑多半是假的：11 条配方被整批拒收 — 弃用高层工具产配方。改用真实 Python requests 脚本逐条重跑采集任
 - recipes/recipe-py-html-entities-not-decoded.md: 提取文本忘 unescape：&#39;/&amp;/&rarr; 原样入库，手写 replace 链还会因顺序二次解码 — 可跑要点：① 取到文本后统一用标准库 html.unescape(text) 解
 - recipes/recipe-py-http-redirect-timeout-tls.md: requests HTTP 层真实现象：重定向拿空 body、连/读超时区分、gzip 自动解压、SSLError 与连接复用探针失效 — 可复用步骤：① 重定向：需要正文就用 allow_redirects=True（
 - recipes/recipe-py-pagination-ignored-param.md: 分页靠路径数字：?page=2 被静默忽略仍返回第1页，跨页还有约17.8%重复需去重 — 可跑要点：① 先确认分页形态——爬页面里『下一页』的锚点规律（本例为 /scro
@@ -15,10 +19,13 @@
 - recipes/recipe-py-spa-empty-shell.md: requests 抓某短视频站首页：200 却返回 <body></body>，正文 0 字符、99.9% 是 JS — 可跑要点：① 先做『SPA 空壳体检』——抓完后计算 body 内去标签文本长度
 - recipes/recipe-py-table-merged-cells.md: requests 解析含 rowspan/colspan 的表格：每行单元格数参差 [3,4,5,...]，列直接错位 — 可跑要点：① 不要用『每行 td 数』当列数；先按 rowspan/colspa
 - recipes/recipe-py-ua-diff-nonbrowser.md: requests 默认 UA 遭差异对待：同 200 却 290 字符 vs 17626 字符正文，另有 403/444/跳登录 — 可跑要点：① 抓取前统一显式设置浏览器 UA（Chrome UA + Accep
+- recipes/recipe-shell-heredoc-quoting.md: bash heredoc 里的嵌套引号会把脚本绞碎 — 不再把长脚本塞进 heredoc。改为把脚本写入临时文件（用写文件工具而非 ec
 - recipes/recipe-web-cjk-substring-search.md: 中文搜索用整串 includes 匹配：自然语言查询必然 0 结果 — 中文按 2-gram 切分、英文数字按词切分，任一命中即算匹配（OR 语义），按
 - recipes/recipe-web-dark-block-patchwork.md: 白底页面上硬贴一块深色搜索框：像补丁，不像设计 — 回归层级手段做焦点：白底 + 清晰边框 + 聚焦时的强调色光环 + 字重/字号对
 - recipes/recipe-web-decorative-motion-debt.md: 粒子背景+扫描线+均衡器：自己觉得科技感，实际是设计债 — 全部删除。只保留功能性动效：滚动入场（IntersectionObserver）
+- recipes/recipe-web-deploy-cache-stale.md: 部署成功但用户看不到新功能：CDN 与浏览器缓存的叠加 — ① curl 检查线上 index.html 是否含新元素、静态资源是否 200
 - recipes/recipe-web-desktop-clip-mistaken-mobile.md: 把「桌面布局的左半被裁」误认为「移动端渲染」 — 一个诊断 wrapper 只测一个宽度；若必须复用，每次截图前显式重置 ifra
+- recipes/recipe-web-dumpdom-iframe-blind.md: --dump-dom 只给主文档：iframe 里的内容一律拿不到 — 两条路：① 要拿被测页面的 DOM，就直接对它本身 dump，不要套 ifram
 - recipes/recipe-web-feedback-outside-viewport.md: 搜索结果在视口外且无即时反馈：用户以为按钮坏了 — 三件套：① 在搜索框正下方（用户当前视野内）放即时反馈条，显示「筛出 N 条 +
 - recipes/recipe-web-focus-vs-scroll-conflict.md: input.focus() 与滚动到结果打架：焦点把视口又拽回搜索框 — 移除滚动类操作里的 input.focus()。若确实需要保留输入便利性，应改为
 - recipes/recipe-web-headless-min-window-width.md: headless 浏览器有最小窗口宽度：--window-size=390 实际渲染成 496px — 不要用 --window-size 模拟移动端。改为：用一个固定 width:3
@@ -28,6 +35,7 @@
 - recipes/recipe-web-measure-race-condition.md: 测量竞态：元素在 1500ms 移除，我恰好在 1500ms 测量 — 在动画进行中（如 120ms）也抓一次状态，而不是只在终点测一次。最终报告同时输
 - recipes/recipe-web-playwright-download-throttled.md: Playwright 与 chromium 下载全被节流卡死：改用系统现成浏览器 — 放弃 Playwright 路线，改用系统里已安装的 Edge 的 headle
 - recipes/recipe-web-reduced-motion-degrade.md: 平滑滚动变「闪现」：prefers-reduced-motion 把位移降级了 — ① 显式控制滚动行为：读取 prefers-reduced-motion，red
+- recipes/recipe-web-subview-refresh-miss.md: 切换筛选维度后局部视图不刷新：render() 里漏了 renderTags() — 在分类切换的处理里显式补调 renderTags()，并在代码里加注释写明「re
 - recipes/recipe-web-thumbnail-misjudge.md: 缩略图看走眼：同一现象连续误判三次「移动端文字被裁」 — 用注入式探针取客观数据代替肉眼：document.documentElement
 - recipes/recipe-web-wcag-muted-contrast.md: 次级灰字对比度只有 3.06:1：看着「还行」实则不达 WCAG AA — 按 WCAG 相对亮度公式逐个色值计算对比度，把不达标的次级色调深：--mute
 - recipes/recipe-yaml-frontmatter-colon.md: 手写 YAML frontmatter 时 failure 含冒号被当键值分隔符，渲染/回读直接崩——改用 yaml.safe_dump — ① frontmatter 永远用 yaml.safe_dump(dict) 生
