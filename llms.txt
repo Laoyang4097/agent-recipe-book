@@ -2,6 +2,7 @@
 > 人类解题经验的机器可读共享库。每条配方含 模型/skill/harness/硬件 与结构化死胡同。
 
 ## 索引
+- recipes/recipe-git-pat-push.md: 用 fine-grained PAT 推 GitHub：Bearer 头被 git 忽略，必须 URL 内嵌 token 当 Basic Auth — ① git smart-HTTP 用 Basic Auth，Bearer 头无效
 - recipes/recipe-py-antibot-stop-on-hit.md: 反爬遇即停：requests 默认 UA 撞 403+JS/DataDome 挑战与 Cloudflare 403，命中即弃、零绕过 — 可复用步骤：① 抓取任何站点第一条请求就用 try/except 包住，并显式 
 - recipes/recipe-py-content-encoding-double-decode.md: Content-Encoding 静默解压：requests 已自动解 gzip/deflate，手动再解一次即崩；br 未装库则静默乱码 — 可跑要点：① 默认别手动解压——requests 会自动处理 gzip/defl
 - recipes/recipe-py-encoding-mojibake.md: requests 抓中文站默认 r.encoding=ISO-8859-1 致乱码，用 apparent_encoding/content.decode 修复 — 别信 r.encoding。可跑要点：① 先看响应头是否带 charset；无 
@@ -14,6 +15,7 @@
 - recipes/recipe-py-spa-empty-shell.md: requests 抓某短视频站首页：200 却返回 <body></body>，正文 0 字符、99.9% 是 JS — 可跑要点：① 先做『SPA 空壳体检』——抓完后计算 body 内去标签文本长度
 - recipes/recipe-py-table-merged-cells.md: requests 解析含 rowspan/colspan 的表格：每行单元格数参差 [3,4,5,...]，列直接错位 — 可跑要点：① 不要用『每行 td 数』当列数；先按 rowspan/colspa
 - recipes/recipe-py-ua-diff-nonbrowser.md: requests 默认 UA 遭差异对待：同 200 却 290 字符 vs 17626 字符正文，另有 403/444/跳登录 — 可跑要点：① 抓取前统一显式设置浏览器 UA（Chrome UA + Accep
+- recipes/recipe-yaml-frontmatter-colon.md: 手写 YAML frontmatter 时 failure 含冒号被当键值分隔符，渲染/回读直接崩——改用 yaml.safe_dump — ① frontmatter 永远用 yaml.safe_dump(dict) 生
 
 ## 如何被 Agent 读取
 GET api/experiences.json 获取全量结构化数据；GET llms.txt 获取索引。

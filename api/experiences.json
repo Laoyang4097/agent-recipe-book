@@ -1,5 +1,50 @@
 [
   {
+    "id": "recipe-git-pat-push",
+    "title": "用 fine-grained PAT 推 GitHub：Bearer 头被 git 忽略，必须 URL 内嵌 token 当 Basic Auth",
+    "tags": [
+      "git",
+      "ci",
+      "auth",
+      "tooling"
+    ],
+    "model": "Git 2.x + GitHub fine-grained PAT",
+    "problem": "用 fine-grained PAT 推 GitHub 时，想用 git -c http.extraheader=Authorization: Bearer <token> 免输凭证，结果 git 仍要 username、推送失败。后来发现 git 的 smart-HTTP 走 Basic Auth，Bearer 头被忽略，必须把 token 嵌进 URL 当 Basic 凭据；推完还得把 remote URL 里的 token 还原，否则 token 明文留在 .git/config。",
+    "dead_ends": [
+      {
+        "attempt": "git -c http.extraheader=Authorization: Bearer <pat> push origin main",
+        "failure": "git 仍弹出 username 提示或直接 remote: Invalid username or password；Bearer 头没被当作凭据",
+        "duration": "约 10min",
+        "early_signal": "git smart-HTTP 走 Basic Auth 而非 Bearer；extraheader 设了，但 git 内部用空白 username 发 Basic，自然 401"
+      },
+      {
+        "attempt": "把 remote URL 写成 https://<pat>@github.com/owner/repo.git 直接 push",
+        "failure": "推送成功，但发现 token 明文留在 .git/config，公开或协作即泄漏",
+        "duration": "秒级",
+        "early_signal": "URL 内嵌 token 能推，但 push 后必须立刻 git remote set-url origin <无 token 地址> 还原"
+      },
+      {
+        "attempt": "fine-grained PAT 缺对应 scope 时去写 .github/workflows/",
+        "failure": "403 Resource not accessible by integration；一度以为是 token 错",
+        "duration": "排查约 20min",
+        "early_signal": "403 可能是 scope 不足（Workflows 需单独授予），不是 token 失效；看错误里的 Resource not accessible"
+      }
+    ],
+    "solution": "① git smart-HTTP 用 Basic Auth，Bearer 头无效；正确做法是把 PAT 嵌 URL（git push https://<pat>@github.com/owner/repo.git），推完立刻 git remote set-url origin https://github.com/owner/repo.git 抹掉 token。② 不想碰本地 credential，可走 Git Data API（blobs→tree→commit→PATCH ref），token 仅经环境变量、完全不落盘。③ fine-grained PAT 写 workflow 文件需单独授予 Workflows 权限，否则 403。",
+    "result": "实测：Bearer extraheader 失败；URL 内嵌 token 推送成功；推完 set-url 还原后 .git/config 无 token 残留；走 Git Data API 推送全程 token 不落盘、不污染 remote URL。",
+    "retrospective": "a) git 不是带 token 的普通 HTTP 客户端，它守 Basic Auth 老规矩。b) 任何把 token 写进 URL/配置的方案，推完必须还原。c) 写 workflow 文件前先确认 PAT 有 Workflows scope。d) 不想碰 credential 就把 token 当环境变量喂 API 脚本，比塞 URL 安全。",
+    "skills": [
+      "git",
+      "github-api"
+    ],
+    "harness": "Git + GitHub",
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-23"
+  },
+  {
     "id": "recipe-py-antibot-stop-on-hit",
     "title": "反爬遇即停：requests 默认 UA 撞 403+JS/DataDome 挑战与 Cloudflare 403，命中即弃、零绕过",
     "tags": [
@@ -470,6 +515,50 @@
     "result": "实测：某搜索站 默认UA 200/2,443B/正文290 vs 浏览器UA 200/29,506B/正文17,626；某问答站 默认UA 403 JSON(214B) vs 浏览器UA 302→signin；某短视频站 默认UA 444(115B) vs 浏览器UA 200(72,914B)；某代码托管站 两 UA 均 200 且正文均 144,263 字符（无差异）。",
     "retrospective": "UA 是『第一道门』：设了才有资格拿正常页；但设了不等于拿到内容——问答站仍撞登录墙、代码托管站根本不看 UA。判断成功与否要看正文长度/哈希而非 status，且必须逐站验证。",
     "harness": "Python requests",
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-23"
+  },
+  {
+    "id": "recipe-yaml-frontmatter-colon",
+    "title": "手写 YAML frontmatter 时 failure 含冒号被当键值分隔符，渲染/回读直接崩——改用 yaml.safe_dump",
+    "tags": [
+      "yaml",
+      "serialization",
+      "tooling"
+    ],
+    "model": "Python + PyYAML",
+    "problem": "渲染配方 .md 的 YAML frontmatter 时，为图省事用字符串拼接（f-string / 手拼 key: value），结果 dead_ends[].failure 里出现 ImportError: No module named yaml 这种带冒号的值，被 YAML 当成 ImportError 键、No module named yaml 值，整段 frontmatter 解析错位；rebuild 回读报错，新配方没进索引。",
+    "dead_ends": [
+      {
+        "attempt": "用 f-string 手拼 frontmatter，如 f'failure: {row[failure]}'",
+        "failure": "值里含 xxx: yyy 时 YAML 把冒号当分隔符，后续字段整体偏移、解析出非法结构",
+        "duration": "排查约 15min",
+        "early_signal": "只要 failure/problem 文本里出现冒号（报错信息、URL、时间 12:30 等）就会触发，不是偶发"
+      },
+      {
+        "attempt": "给值加单引号保护",
+        "failure": "引号配对与内部转义（反斜杠、嵌套引号）又出新错，且不同字段规则不一致难维护",
+        "duration": "约 10min",
+        "early_signal": "手拼引号是打地鼠，根本解法是别手拼 YAML"
+      },
+      {
+        "attempt": "渲染后没回读校验，直接 commit",
+        "failure": "坏 .md 入库，rebuild 生成的 experiences.json 缺这条、llms.txt 也没它，下游静默缺数据",
+        "duration": "直到下次 rebuild 才发现",
+        "early_signal": "缺一道渲染→回读→断言的闸门，坏文件就能落地"
+      }
+    ],
+    "solution": "① frontmatter 永远用 yaml.safe_dump(dict) 生成，它按值类型正确加引号与转义，冒号不再是问题。② 渲染完立刻回读 yaml.safe_load(frontmatter) 做一次 roundtrip 断言；失败就删文件报错，坏 .md 不入库。③ 不要把生成 YAML 当字符串拼接活——YAML 是数据格式不是文本。",
+    "result": "改用 yaml.safe_dump 后，含冒号、引号、换行的 failure 值全部正确往返；加 roundtrip 闸门后，任何坏渲染在 commit 前就被拦下。",
+    "retrospective": "a) 凡要产出结构化文本格式（YAML/JSON/CSV），用库序列化别手拼。b) 渲染→回读双关校验是防止脏数据入库的廉价保险。c) 报错信息、时间、URL 是最常见的冒号陷阱，别假设值里没有。",
+    "skills": [
+      "pyyaml",
+      "serialization"
+    ],
+    "harness": "Python + PyYAML",
     "verified": true,
     "status": "published",
     "seed": true,
