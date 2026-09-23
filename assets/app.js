@@ -22,6 +22,21 @@
     "shadow-dom": ["影子", "web component", "组件"],
   };
 
+  /* 领域分类：按 id 前缀划分，与 recipe.schema.md §1.1 的三类构成一致 */
+  const GROUPS = [
+    { key: "all", label: "全部", match: () => true },
+    { key: "collect", label: "采集", match: (r) => /^recipe-py-/.test(r.id) },
+    { key: "web", label: "网站工程", match: (r) => /^recipe-web-/.test(r.id) },
+    { key: "infra", label: "工具链", match: (r) => /^recipe-(git|yaml)-/.test(r.id) },
+  ];
+  let activeGroup = "all";
+
+  /* 当前生效的领域；有搜索词时跨全部领域（找东西不该被领域挡住） */
+  function groupOf() {
+    if (query) return GROUPS[0];
+    return GROUPS.find((g) => g.key === activeGroup) || GROUPS[0];
+  }
+
   let RECIPES = [];
   const activeTags = new Set();
   let query = "";
@@ -43,6 +58,7 @@
   function boot() {
     $("#stat-count").textContent = RECIPES.length;
     renderPreview();
+    renderGroups();
     renderTags();
     render();
     setupReveal();
@@ -90,7 +106,7 @@
     const box = $("#tags");
     box.innerHTML = "";
     const freq = new Map();
-    RECIPES.forEach((r) => (r.tags || []).forEach((t) => freq.set(t, (freq.get(t) || 0) + 1)));
+    RECIPES.filter(groupOf().match).forEach((r) => (r.tags || []).forEach((t) => freq.set(t, (freq.get(t) || 0) + 1)));
     const all = [...freq.keys()].sort((a, b) => (freq.get(b) - freq.get(a)) || a.localeCompare(b));
     const shown = tagsExpanded ? all : all.slice(0, TAG_LIMIT);
 
@@ -177,6 +193,32 @@
     return out.replace(/\u0001(\d+)\u0001/g, (_, i) => '<mark class="hl">' + store[+i] + "</mark>");
   }
 
+  /* 领域分类条：只显示有内容的组；切换时清空细标签，避免"换了领域却筛出空" */
+  function renderGroups() {
+    const box = $("#groups");
+    if (!box) return;
+    box.innerHTML = "";
+    GROUPS.forEach((g) => {
+      const n = RECIPES.filter(g.match).length;
+      if (g.key !== "all" && n === 0) return;
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "grp" + (activeGroup === g.key ? " active" : "");
+      b.setAttribute("role", "tab");
+      b.setAttribute("aria-selected", String(activeGroup === g.key));
+      b.innerHTML = esc(g.label) + '<span class="grp-n">' + n + "</span>";
+      b.addEventListener("click", () => {
+        activeGroup = g.key;
+        activeTags.clear();
+        tagsExpanded = false;
+        renderGroups();
+        renderTags(); // 领域变了，标签胶囊要跟着换一批（render() 不负责它）
+        render();
+      });
+      box.appendChild(b);
+    });
+  }
+
   /* 命中数：任一关键词命中即算匹配（OR），结果按命中数降序 —— 宁可多给相关项，不空手 */
   function hitCount(r, terms) {
     const hay = hayOf(r);
@@ -190,7 +232,7 @@
   }
 
   function currentList() {
-    let list = RECIPES.filter(
+    let list = RECIPES.filter(groupOf().match).filter(
       (r) => !activeTags.size || [...activeTags].every((t) => (r.tags || []).includes(t))
     );
     if (query) {
@@ -210,7 +252,7 @@
     const grid = $("#grid");
     const list = currentList();
     const terms = query ? tokenize(query) : [];
-    const filtering = activeTags.size > 0 || !!query;
+    const filtering = activeTags.size > 0 || !!query || activeGroup !== "all";
     $("#results").textContent = filtering
       ? `匹配 ${list.length} 条 · 共 ${RECIPES.length} 条`
       : `共 ${RECIPES.length} 条`;
@@ -244,7 +286,7 @@
   function updateStatus(list) {
     const box = $("#search-status");
     if (!box) return;
-    const filtering = activeTags.size > 0 || !!query;
+    const filtering = activeTags.size > 0 || !!query || activeGroup !== "all";
     if (!filtering) {
       box.hidden = true; box.innerHTML = "";
       return;
@@ -255,8 +297,11 @@
         ? `<span>没有匹配「<b>${esc(query)}</b>」的配方。</span><span class="ss-try">试试：编码 / 反爬 / 分页 / 会话</span>`
         : `<span>这组标签下暂时没有配方。</span><span class="ss-try">去掉一个标签再试</span>`;
     } else {
-      const tagNote = activeTags.size ? `（已选 ${activeTags.size} 个标签）` : "";
-      box.innerHTML = `<span>筛出 <b>${list.length}</b> 条配方${tagNote}</span><a href="#recipes">跳到配方列表 ↓</a>`;
+      const parts = [];
+      if (activeGroup !== "all" && !query) parts.push(groupOf().label);
+      if (activeTags.size) parts.push(`已选 ${activeTags.size} 个标签`);
+      const note = parts.length ? `（${parts.join(" · ")}）` : "";
+      box.innerHTML = `<span>筛出 <b>${list.length}</b> 条配方${note}</span><a href="#recipes">跳到配方列表 ↓</a>`;
     }
   }
 

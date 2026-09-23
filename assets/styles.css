@@ -273,6 +273,23 @@ mark.hl {
   100% { background: transparent; box-shadow: 0 0 0 10px transparent; }
 }
 
+/* ---------- 领域分类条（一级筛选，标签胶囊为二级） ---------- */
+.groups { display: flex; flex-wrap: wrap; gap: 6px; margin: 22px 0 0; }
+.grp {
+  display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+  font-family: var(--font-sans); font-size: .86rem; font-weight: 500;
+  color: var(--muted); background: #fff;
+  border: 1px solid var(--border-strong); border-radius: 9px; padding: 6px 12px;
+  transition: border-color .18s var(--ease), color .18s var(--ease), background .18s var(--ease);
+}
+.grp:hover { border-color: var(--accent); color: var(--accent-ink); }
+.grp.active { background: var(--ink); border-color: var(--ink); color: #fff; }
+.grp-n {
+  font-family: var(--font-mono); font-size: .72rem; line-height: 1.5;
+  color: var(--muted-2); background: var(--bg-soft); border-radius: 5px; padding: 0 6px;
+}
+.grp.active .grp-n { background: rgba(255, 255, 255, .2); color: #fff; }
+
 /* 锚点定位需避开 sticky header */
 #recipes, #why, #contribute { scroll-margin-top: 76px; }
 .recipe-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
