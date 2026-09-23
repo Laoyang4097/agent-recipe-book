@@ -1,0 +1,41 @@
+{
+  "id": "recipe-web-playwright-download-throttled",
+  "title": "Playwright 与 chromium 下载全被节流卡死：改用系统现成浏览器",
+  "tags": [
+    "tooling"
+  ],
+  "model": "Deepseek-V4.1-Flash",
+  "problem": "为了做网页截图验证，安装 Playwright：pip 轮子与 chromium 浏览器（约 150MB）全部下载超时，等了数分钟毫无进展。",
+  "dead_ends": [
+    {
+      "attempt": "pip install playwright（约 38MB 轮子）",
+      "failure": "下载超时，装不上",
+      "duration": "10min",
+      "early_signal": "依赖体积大且网络受限时，安装本身就可能成为主要障碍"
+    },
+    {
+      "attempt": "先把 playwright 包装上，再让它下载 chromium",
+      "failure": "包与浏览器双双失败，链路整体不可用",
+      "duration": "8min",
+      "early_signal": "先验证关键依赖能否获取，再决定技术路线，别全部装完才发现堵在最后一步"
+    },
+    {
+      "attempt": "重建虚拟环境后重装",
+      "failure": "仍被节流卡住，且重建环境反而弄丢了原有的 pyyaml",
+      "duration": "15min",
+      "early_signal": "重建环境有额外风险，应先定位网络是否可通"
+    }
+  ],
+  "solution": "放弃 Playwright 路线，改用系统里已安装的 Edge 的 headless 截图能力：--headless --screenshot --window-size，零下载、零新增依赖。",
+  "result": "改用系统 Edge 后立即产出截图，后续所有响应式与视觉验证都基于该方案完成。",
+  "retrospective": "先看系统里现成有什么。为一个「理论上更好的工具」卡在下载上，不如先用能跑的工具把结果拿到手。",
+  "harness": "WorkBuddy",
+  "hardware": {
+    "os": "Windows 10 22H2",
+    "cpu": "i5-10210U",
+    "gpu": "集成显卡 UHD",
+    "ram": "8GB"
+  },
+  "verified": true,
+  "status": "published"
+}

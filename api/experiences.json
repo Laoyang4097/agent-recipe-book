@@ -522,6 +522,602 @@
     "created_at": "2026-09-23"
   },
   {
+    "id": "recipe-web-cjk-substring-search",
+    "title": "中文搜索用整串 includes 匹配：自然语言查询必然 0 结果",
+    "tags": [
+      "frontend",
+      "search",
+      "encoding"
+    ],
+    "model": "Deepseek-V4.1-Flash",
+    "problem": "用户按输入框提示输入「抓回来是乱码」，点检索毫无结果；用户以为是按钮坏了，实际是搜索本身搜不到东西。",
+    "dead_ends": [
+      {
+        "attempt": "沿用常见的 hay.includes(query) 整串匹配",
+        "failure": "输入「抓回来是乱码」匹配 0 条，「乱码 编码」也是 0 条；只有与正文完全连续的同一子串才可能命中",
+        "duration": "20min",
+        "early_signal": "用户报「点了没反应」，但真相是没筛出东西 —— 症状描述会指向错误的方向"
+      },
+      {
+        "attempt": "先加滚动与反馈条解决「看不见结果」",
+        "failure": "治了标：反馈有了，结果仍是 0 条",
+        "duration": "15min",
+        "early_signal": "反馈层的问题容易先被发现，但要继续追问「到底筛出了几条」"
+      }
+    ],
+    "solution": "中文按 2-gram 切分、英文数字按词切分，任一命中即算匹配（OR 语义），按命中数降序；对标题命中额外加权，让最相关的排最前。",
+    "result": "同一句「抓回来是乱码」切出 抓回/回来/来是/是乱/乱码 等词后命中 3 条，其中两条标题直接含「乱码」排在前面。",
+    "retrospective": "中文没有空格，用 includes 做整串匹配等于没有搜索。面向中文用户的关键词功能，分词是入场券而不是优化项。",
+    "harness": "WorkBuddy",
+    "hardware": {
+      "os": "Windows 10 22H2",
+      "cpu": "i5-10210U",
+      "gpu": "集成显卡 UHD",
+      "ram": "8GB"
+    },
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-24"
+  },
+  {
+    "id": "recipe-web-dark-block-patchwork",
+    "title": "白底页面上硬贴一块深色搜索框：像补丁，不像设计",
+    "tags": [
+      "design-system"
+    ],
+    "model": "Deepseek-V4.1-Flash",
+    "problem": "为了制造视觉焦点，在纯白页面上放了一个深色圆角搜索框。单看很酷，整体却像贴了块膏药，与页面气质割裂。",
+    "dead_ends": [
+      {
+        "attempt": "用高对比深色块做视觉焦点",
+        "failure": "页面其余部分都是白底细线，深色块没有设计语言支撑，读起来像第三方组件被嵌进来",
+        "duration": "30min",
+        "early_signal": "如果这个元素单独拿出来和周围没有任何共同元素，多半是拼凑"
+      },
+      {
+        "attempt": "降低深色块的饱和度来缓和",
+        "failure": "仍是「一块不同颜色的东西」，割裂感只减轻不消失",
+        "duration": "15min",
+        "early_signal": "问题在「用色块做层级」这个思路本身，不在色值"
+      }
+    ],
+    "solution": "回归层级手段做焦点：白底 + 清晰边框 + 聚焦时的强调色光环 + 字重/字号对比。用「层级」而不是「色块」表达重要性。",
+    "result": "搜索区与页面其余部分共用同一套边框、圆角与强调色，整体感显著提升；聚焦时的光环又足够明确。",
+    "retrospective": "用色块做焦点是偷懒；用层级（边框、阴影、字重、留白）做焦点才是设计。前者是拼凑，后者是系统。",
+    "harness": "WorkBuddy",
+    "hardware": {
+      "os": "Windows 10 22H2",
+      "cpu": "i5-10210U",
+      "gpu": "集成显卡 UHD",
+      "ram": "8GB"
+    },
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-24"
+  },
+  {
+    "id": "recipe-web-decorative-motion-debt",
+    "title": "粒子背景+扫描线+均衡器：自己觉得科技感，实际是设计债",
+    "tags": [
+      "design-system",
+      "motion"
+    ],
+    "model": "Deepseek-V4.1-Flash",
+    "problem": "初版为了「后现代科技感」加了粒子网络背景、顶部流动扫描线、品牌均衡器竖条，自我感觉良好，但整体观感像模板站。",
+    "dead_ends": [
+      {
+        "attempt": "用粒子网络 + 渐变光晕营造科技感",
+        "failure": "这正是 2026 年被公开点名的「AI 生成模板」标配信号，反而削弱专业感",
+        "duration": "120min",
+        "early_signal": "同类站点千篇一律地使用同一批元素，说明它已从「设计选择」退化为「默认套路」"
+      },
+      {
+        "attempt": "用纯装饰 keyframe 提升「精致度」（扫描线、呼吸竖条）",
+        "failure": "它们不传达任何信息，属于被点名的 design debt；还会与内容争夺注意力",
+        "duration": "40min",
+        "early_signal": "问一个动效「回答了什么问题」，答不上来就是装饰"
+      }
+    ],
+    "solution": "全部删除。只保留功能性动效：滚动入场（IntersectionObserver）、hover 抬升反馈、状态变化提示。判断标准是「这条动效回答了什么问题」，答不上来即删。",
+    "result": "删除后页面安静下来，内容成为主角；后续对比外部企业级标杆（Linear/Stripe/Vercel 一类）时，结构性差距从「不在一个级别」收敛到「同一档位」。",
+    "retrospective": "装饰性动效是负债不是资产。判断标准很简单：问它「回答了什么问题」，答不上来就删。",
+    "harness": "WorkBuddy",
+    "hardware": {
+      "os": "Windows 10 22H2",
+      "cpu": "i5-10210U",
+      "gpu": "集成显卡 UHD",
+      "ram": "8GB"
+    },
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-24"
+  },
+  {
+    "id": "recipe-web-desktop-clip-mistaken-mobile",
+    "title": "把「桌面布局的左半被裁」误认为「移动端渲染」",
+    "tags": [
+      "web-verify",
+      "headless"
+    ],
+    "model": "Deepseek-V4.1-Flash",
+    "problem": "在诊断页里依次测 390px 与 1280px 两个宽度，截图时 iframe 停在 1280，而外层容器只有 390px 宽且 overflow:hidden —— 看到的是「桌面布局被裁掉右边」，却当成移动端渲染来分析。",
+    "dead_ends": [
+      {
+        "attempt": "在同一个 wrapper 里循环改 iframe 宽度，先 390 再 1280",
+        "failure": "截图时 iframe 已停在 1280，外层 390px 容器把它裁掉右边；标题、胶囊看起来全被切断，误判为移动端排版问题",
+        "duration": "30min",
+        "early_signal": "被裁的位置恰好落在 390px 容器边界，而不是文字自身的自然换行点"
+      },
+      {
+        "attempt": "据此给移动端加一系列换行/宽度修复",
+        "failure": "真实 390px 渲染完全正常，改了半天没有对象",
+        "duration": "25min",
+        "early_signal": "应先用固定单宽度的 wrapper 复现一次，再做判断"
+      }
+    ],
+    "solution": "一个诊断 wrapper 只测一个宽度；若必须复用，每次截图前显式重置 iframe 宽度并等待重排，且在报告里输出当前 clientWidth 作为自证。",
+    "result": "改为单宽度 wrapper 后，390px 下的真实渲染显示标题两行完整、胶囊五行完整、导航含 GitHub 按钮，全部正常。",
+    "retrospective": "当「截图看起来坏了」时，先怀疑测量装置，再怀疑产品代码。本次 5 次视觉 bug 报告里有 3 次是装置问题。",
+    "harness": "WorkBuddy",
+    "hardware": {
+      "os": "Windows 10 22H2",
+      "cpu": "i5-10210U",
+      "gpu": "集成显卡 UHD",
+      "ram": "8GB"
+    },
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-24"
+  },
+  {
+    "id": "recipe-web-feedback-outside-viewport",
+    "title": "搜索结果在视口外且无即时反馈：用户以为按钮坏了",
+    "tags": [
+      "frontend",
+      "ux"
+    ],
+    "model": "Deepseek-V4.1-Flash",
+    "problem": "搜索框在页面上部、结果列表在页面下部，点检索后页面纹丝不动，使用者判断「按钮没反应」，必须手动往下翻才发现筛选已生效。",
+    "dead_ends": [
+      {
+        "attempt": "只在控制台确认 render 被调用、数据确实变了",
+        "failure": "从代码视角一切正常，但用户完全感知不到 —— 反馈发生在视野之外",
+        "duration": "10min",
+        "early_signal": "「功能生效」和「用户知道功能生效了」是两个独立的验收项"
+      },
+      {
+        "attempt": "加一个页面底部的提示条",
+        "failure": "位置太靠下，仍在视口外，等于没加",
+        "duration": "5min",
+        "early_signal": "反馈元素必须落在当前视口内，位置比文案更重要"
+      }
+    ],
+    "solution": "三件套：① 在搜索框正下方（用户当前视野内）放即时反馈条，显示「筛出 N 条 + 跳到结果 ↓」，任何筛选变化立刻更新，并用 aria-live 播报；② 点「检索」或回车这类明确的「我要看结果」动作时，平滑滚动到结果区；③ 给滚动目标加 scroll-margin-top 避开 sticky 头部。",
+    "result": "注入脚本模拟输入后，反馈条立即显示「筛出 3 条配方 · 跳到配方列表 ↓」；点击检索后页面滚到结果区，视口内直接看到「匹配 3 条」与三张卡片。",
+    "retrospective": "反馈必须出现在用户当前的视野里。结果在下方，就要么把反馈搬到上面，要么把人带到下面 —— 不能指望用户自己找。",
+    "harness": "WorkBuddy",
+    "hardware": {
+      "os": "Windows 10 22H2",
+      "cpu": "i5-10210U",
+      "gpu": "集成显卡 UHD",
+      "ram": "8GB"
+    },
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-24"
+  },
+  {
+    "id": "recipe-web-focus-vs-scroll-conflict",
+    "title": "input.focus() 与滚动到结果打架：焦点把视口又拽回搜索框",
+    "tags": [
+      "frontend",
+      "ux"
+    ],
+    "model": "Deepseek-V4.1-Flash",
+    "problem": "加上「点检索后滚动到结果区」之后，点击按钮却总是先跳回搜索框再滚动，行为互相拉扯。",
+    "dead_ends": [
+      {
+        "attempt": "保留按钮回调里的 input.focus()（原本用于方便继续输入）",
+        "failure": "聚焦会触发浏览器把该元素滚入视野，与「滚动到结果列表」方向相反，两个滚动相互抵消",
+        "duration": "15min",
+        "early_signal": "焦点调用本身就是一次隐式滚动，与显式滚动放一起必然冲突"
+      },
+      {
+        "attempt": "调大 scrollIntoView 的延时，期望后执行者胜出",
+        "failure": "时序只是掩盖冲突，实际仍会看到跳动",
+        "duration": "8min",
+        "early_signal": "用延时解决两个相反意图的冲突不可靠"
+      }
+    ],
+    "solution": "移除滚动类操作里的 input.focus()。若确实需要保留输入便利性，应改为不触发滚动的聚焦方式，或把「继续输入」与「查看结果」做成两个明确不同的动作。",
+    "result": "去掉 focus() 后，点检索只发生一次滚动，稳定落到结果区。",
+    "retrospective": "任何主动 focus() 都是一次隐式的滚动请求。它和滚动逻辑放在一起时，必须先想清楚谁说话。",
+    "harness": "WorkBuddy",
+    "hardware": {
+      "os": "Windows 10 22H2",
+      "cpu": "i5-10210U",
+      "gpu": "集成显卡 UHD",
+      "ram": "8GB"
+    },
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-24"
+  },
+  {
+    "id": "recipe-web-headless-min-window-width",
+    "title": "headless 浏览器有最小窗口宽度：--window-size=390 实际渲染成 496px",
+    "tags": [
+      "web-verify",
+      "headless",
+      "screenshot"
+    ],
+    "model": "Deepseek-V4.1-Flash",
+    "problem": "用 Edge/Chrome headless 的 --window-size=390,1000 截移动端图做响应式验证，看到的布局与真机不符，据此误判「移动端横向溢出」并白改了两轮 CSS。",
+    "dead_ends": [
+      {
+        "attempt": "--window-size=390,1000 直接截 390px 移动端",
+        "failure": "页面实际渲染宽度是 496px，媒体查询全部按 496 生效",
+        "duration": "20min",
+        "early_signal": "注入探针回读 document.documentElement.clientWidth 得到 496，而不是请求的 390"
+      },
+      {
+        "attempt": "认定是 CSS 横向溢出，给 grid 项加 min-width:0、改列宽",
+        "failure": "改完重截，「文字被裁」的现象一模一样 —— 因为根本不是 CSS 的问题",
+        "duration": "40min",
+        "early_signal": "scrollWidth 恒等于 clientWidth、overflow-x 为 visible，本就没有真实溢出"
+      },
+      {
+        "attempt": "换用 Chrome 的 --headless=new 模式",
+        "failure": "同样受最小窗口宽度限制",
+        "duration": "10min",
+        "early_signal": "这是 Windows 窗口管理器的最小尺寸约束，与 headless 新旧模式无关"
+      }
+    ],
+    "solution": "不要用 --window-size 模拟移动端。改为：用一个固定 width:390px 的 <iframe> 承载页面，再截整个外层窗口（窗口宽 520px 即可）。并在注入探针里同时回读 iframe.innerWidth 与 matchMedia('(max-width:600px)').matches，双重确认视口真的生效。",
+    "result": "改用 iframe 后实测 iframe.innerWidth=390、媒体查询按 390 正确命中；同一页面在 390px 与 1280px 下 scrollWidth 均等于视口宽，横向溢出为 0 —— 此前三次「被裁」判断全部被推翻。",
+    "retrospective": "截图工具的「看起来不对」和「真的不对」是两件事。任何与视口相关的视觉判断，都要先回读 clientWidth 确认测量装置本身是对的。",
+    "harness": "WorkBuddy",
+    "hardware": {
+      "os": "Windows 10 22H2",
+      "cpu": "i5-10210U",
+      "gpu": "集成显卡 UHD",
+      "ram": "8GB"
+    },
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-24"
+  },
+  {
+    "id": "recipe-web-headless-profile-conflict",
+    "title": "连续跑多个 headless 实例报 exit 23：用户数据目录被抢占",
+    "tags": [
+      "tooling",
+      "headless"
+    ],
+    "model": "Deepseek-V4.1-Flash",
+    "problem": "连续截两张图，第二张报 exit code 23、截图文件根本不生成。",
+    "dead_ends": [
+      {
+        "attempt": "原样重跑同一个命令",
+        "failure": "仍报 exit 23，文件依旧不生成",
+        "duration": "5min",
+        "early_signal": "第一张成功、第二张失败，说明是实例之间的相互干扰而非命令本身错"
+      },
+      {
+        "attempt": "怀疑页面渲染太慢导致超时",
+        "failure": "增大等待时间无效，退出码仍是 23",
+        "duration": "8min",
+        "early_signal": "exit 23 是浏览器进程启动阶段的失败，不是渲染超时"
+      }
+    ],
+    "solution": "给每个 headless 实例指定独立的 --user-data-dir（如 ./_edgeprofile1、./_edgeprofile2），避免争夺同一个 profile 目录。",
+    "result": "加独立 --user-data-dir 后连续多次截图全部成功。",
+    "retrospective": "headless 不等于无状态 —— 它仍然会去抢用户数据目录并加锁。批量跑截图时必须隔离 profile。",
+    "harness": "WorkBuddy",
+    "hardware": {
+      "os": "Windows 10 22H2",
+      "cpu": "i5-10210U",
+      "gpu": "集成显卡 UHD",
+      "ram": "8GB"
+    },
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-24"
+  },
+  {
+    "id": "recipe-web-iframe-height-scroll-false-negative",
+    "title": "iframe 高度≥内容高度时测不到滚动：scrollY 恒为 0 的假阴性",
+    "tags": [
+      "web-verify",
+      "headless"
+    ],
+    "model": "Deepseek-V4.1-Flash",
+    "problem": "验证「点检索会不会滚动到结果区」，注入脚本报告 scrollY=0 未滚动，差点去改产品代码。",
+    "dead_ends": [
+      {
+        "attempt": "把 iframe 设成 2200px 高来容纳长页面",
+        "failure": "页面内容只有约 1900px，iframe 内没有可滚动空间，scrollY 恒为 0 —— 得到「未滚动」的假结论",
+        "duration": "15min",
+        "early_signal": "scrollHeight 小于 iframe 高度，说明容器比内容还高"
+      },
+      {
+        "attempt": "转头去排查 scrollIntoView 的 behavior 参数",
+        "failure": "方向错了，参数本身没问题",
+        "duration": "10min",
+        "early_signal": "先确认测试环境允许这个行为发生，再怀疑被观测的代码"
+      }
+    ],
+    "solution": "把验证用 iframe 的高度设为一个真实视口高度（如 1000px），确保内容必然溢出产生滚动条，再执行点击与测量。",
+    "result": "iframe 改 1000px 高后，立即测出点击后 scrollY=931，滚动行为确认生效。",
+    "retrospective": "验证一个行为之前，先确认测试环境允许这个行为发生 —— 否则会得到「假阴性」，把测试装置的问题记到产品头上。",
+    "harness": "WorkBuddy",
+    "hardware": {
+      "os": "Windows 10 22H2",
+      "cpu": "i5-10210U",
+      "gpu": "集成显卡 UHD",
+      "ram": "8GB"
+    },
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-24"
+  },
+  {
+    "id": "recipe-web-lineclamp-vs-highlight",
+    "title": "截断与高亮打架：命中词被 line-clamp 藏掉，结果显得莫名其妙",
+    "tags": [
+      "frontend",
+      "css",
+      "search"
+    ],
+    "model": "Deepseek-V4.1-Flash",
+    "problem": "卡片摘要用 JS slice 按字符硬切，结尾断在「默认 python-requests U...」这种怪位置；加搜索高亮后更严重 —— 命中词若落在视觉截断之外，用户看到一条结果却找不到它为什么在。",
+    "dead_ends": [
+      {
+        "attempt": "用 slice(0, 96) 控制摘要长度",
+        "failure": "按字符数切断，断点与视觉行数无关，出现「U...」「re...」这类难看的断尾",
+        "duration": "10min",
+        "early_signal": "字符数不等于行数，容器宽度会变、字体也会变"
+      },
+      {
+        "attempt": "改成 CSS -webkit-line-clamp:2 优雅省略",
+        "failure": "截断变好看了，但视觉上只显示约 40-50 字，而 slice 仍允许 180 字，命中词被截在视野外，高亮看不见",
+        "duration": "20min",
+        "early_signal": "截断与高亮是两个会互相打架的需求，改完一个要回头验证另一个"
+      }
+    ],
+    "solution": "① 视觉截断交给 CSS -webkit-line-clamp，JS 的 slice 只作为超长兜底；② 增加片段定位：先算出命中词在原文中的最早位置，若位置太靠后就以它为起点截取片段（前面补省略号），保证命中词落在可见区内。",
+    "result": "摘要从「抓某公开 HTTP 测试服务返回的压缩响应…」（看不到命中词）变为「…r 字节、r.text 是乱码，却不报错。」，命中词与高亮同屏可见。",
+    "retrospective": "截断和高亮是两个会打架的需求。谁负责截断，谁就必须知道「哪一段最重要」—— 否则精心做的高亮会被截掉，结果比不做还糟。",
+    "harness": "WorkBuddy",
+    "hardware": {
+      "os": "Windows 10 22H2",
+      "cpu": "i5-10210U",
+      "gpu": "集成显卡 UHD",
+      "ram": "8GB"
+    },
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-24"
+  },
+  {
+    "id": "recipe-web-measure-race-condition",
+    "title": "测量竞态：元素在 1500ms 移除，我恰好在 1500ms 测量",
+    "tags": [
+      "web-verify"
+    ],
+    "model": "Deepseek-V4.1-Flash",
+    "problem": "验证「滚动到结果区后落点高亮是否触发」，报告 flash class = false，看起来功能没生效。",
+    "dead_ends": [
+      {
+        "attempt": "直接判定高亮逻辑没执行，准备改代码",
+        "failure": "反复读代码，逻辑是对的、class 也确实被加上了",
+        "duration": "15min",
+        "early_signal": "代码里 setTimeout(remove, 1500) 与测量时刻 1500ms 完全重合"
+      },
+      {
+        "attempt": "把测量时间往后推（1700ms）",
+        "failure": "仍然是 false，因为移除更早发生",
+        "duration": "5min",
+        "early_signal": "向后推只会更晚；应该向中间要状态"
+      }
+    ],
+    "solution": "在动画进行中（如 120ms）也抓一次状态，而不是只在终点测一次。最终报告同时输出「120ms 时=true / 1500ms 时=false」，既证明触发、也说明是瞬态。",
+    "result": "补测 120ms 后得到 flash class = true，确认落点提示正常触发；此前 false 纯属测量竞态。",
+    "retrospective": "验证瞬态行为要测「过程中的状态」。只在终点测一次，等于用终点去否证起点。",
+    "harness": "WorkBuddy",
+    "hardware": {
+      "os": "Windows 10 22H2",
+      "cpu": "i5-10210U",
+      "gpu": "集成显卡 UHD",
+      "ram": "8GB"
+    },
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-24"
+  },
+  {
+    "id": "recipe-web-playwright-download-throttled",
+    "title": "Playwright 与 chromium 下载全被节流卡死：改用系统现成浏览器",
+    "tags": [
+      "tooling"
+    ],
+    "model": "Deepseek-V4.1-Flash",
+    "problem": "为了做网页截图验证，安装 Playwright：pip 轮子与 chromium 浏览器（约 150MB）全部下载超时，等了数分钟毫无进展。",
+    "dead_ends": [
+      {
+        "attempt": "pip install playwright（约 38MB 轮子）",
+        "failure": "下载超时，装不上",
+        "duration": "10min",
+        "early_signal": "依赖体积大且网络受限时，安装本身就可能成为主要障碍"
+      },
+      {
+        "attempt": "先把 playwright 包装上，再让它下载 chromium",
+        "failure": "包与浏览器双双失败，链路整体不可用",
+        "duration": "8min",
+        "early_signal": "先验证关键依赖能否获取，再决定技术路线，别全部装完才发现堵在最后一步"
+      },
+      {
+        "attempt": "重建虚拟环境后重装",
+        "failure": "仍被节流卡住，且重建环境反而弄丢了原有的 pyyaml",
+        "duration": "15min",
+        "early_signal": "重建环境有额外风险，应先定位网络是否可通"
+      }
+    ],
+    "solution": "放弃 Playwright 路线，改用系统里已安装的 Edge 的 headless 截图能力：--headless --screenshot --window-size，零下载、零新增依赖。",
+    "result": "改用系统 Edge 后立即产出截图，后续所有响应式与视觉验证都基于该方案完成。",
+    "retrospective": "先看系统里现成有什么。为一个「理论上更好的工具」卡在下载上，不如先用能跑的工具把结果拿到手。",
+    "harness": "WorkBuddy",
+    "hardware": {
+      "os": "Windows 10 22H2",
+      "cpu": "i5-10210U",
+      "gpu": "集成显卡 UHD",
+      "ram": "8GB"
+    },
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-24"
+  },
+  {
+    "id": "recipe-web-reduced-motion-degrade",
+    "title": "平滑滚动变「闪现」：prefers-reduced-motion 把位移降级了",
+    "tags": [
+      "frontend",
+      "a11y"
+    ],
+    "model": "Deepseek-V4.1-Flash",
+    "problem": "用户反馈点检索后是「闪现」到列表、没有过渡，怀疑是动画写错。",
+    "dead_ends": [
+      {
+        "attempt": "怀疑 scrollIntoView 的参数写错 / CSS scroll-behavior 未生效",
+        "failure": "代码与 CSS 都正确，但实测仍是瞬时跳转",
+        "duration": "20min",
+        "early_signal": "注入探针回读 matchMedia('(prefers-reduced-motion: reduce)').matches = true，根因在用户系统设置而非代码"
+      },
+      {
+        "attempt": "为「尊重系统设置」而把落点提示也一并禁掉",
+        "failure": "用户既失去平滑滚动，也失去结果位置提示，体验反而更差",
+        "duration": "10min",
+        "early_signal": "位移类动画与颜色类变化应分开对待，前者才属于前庭刺激"
+      }
+    ],
+    "solution": "① 显式控制滚动行为：读取 prefers-reduced-motion，reduce 时用 behavior:'auto'，否则 'smooth'，不依赖 CSS 传递；② 落点提示改为始终执行 —— 它是纯颜色脉冲、无任何位移，不构成前庭刺激，反而是位移被降级后的必要定位补偿；③ 在 reduced-motion 媒体查询段里为它开例外，否则会被全局的 animation:none 一起禁掉。",
+    "result": "实测落点提示在 120ms 时 class=true 正常触发；在 reduce=true 环境下用户也能明确看到结果落在哪里。",
+    "retrospective": "尊重 prefers-reduced-motion 不等于什么都不做。要区分「位移类动画」（该禁）与「颜色/透明度变化」（可留），后者往往是前者被降级后的必要补偿。",
+    "harness": "WorkBuddy",
+    "hardware": {
+      "os": "Windows 10 22H2",
+      "cpu": "i5-10210U",
+      "gpu": "集成显卡 UHD",
+      "ram": "8GB"
+    },
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-24"
+  },
+  {
+    "id": "recipe-web-thumbnail-misjudge",
+    "title": "缩略图看走眼：同一现象连续误判三次「移动端文字被裁」",
+    "tags": [
+      "web-verify"
+    ],
+    "model": "Deepseek-V4.1-Flash",
+    "problem": "从截图缩略图看，移动端副标题、胶囊像是被右边框切断，连续三轮回合都据此改了代码。",
+    "dead_ends": [
+      {
+        "attempt": "看缩略图判断「文字被裁」并改 CSS",
+        "failure": "改完再截仍然「像被裁」，来回三轮",
+        "duration": "50min",
+        "early_signal": "每次「被裁」的位置都紧贴缩略图边缘，而不是文字的语义断点"
+      },
+      {
+        "attempt": "放大截图肉眼细看",
+        "failure": "放大后仍难以确定是换行还是裁切",
+        "duration": "10min",
+        "early_signal": "肉眼分辨率不足以判断像素级归属，应换客观指标"
+      }
+    ],
+    "solution": "用注入式探针取客观数据代替肉眼：document.documentElement.scrollWidth（是否横向溢出）、getComputedStyle(el).gridTemplateColumns（媒体查询是否生效）、el.getBoundingClientRect()（元素真实左右边界）、matchMedia().matches（断点是否命中）。",
+    "result": "390px 与 1280px 下 scrollWidth 均等于视口宽、overflow-x 为 visible、各关键元素 right 全部小于视口宽；超出的仅 3 个元素且全是默认 translateX(100%) 收起的详情抽屉 —— 零溢出，三次判断全部推翻。",
+    "retrospective": "缩略图的字距、边缘、对比度都会骗人。视觉评估必须有客观测量兜底，否则会在「自己造的 bug」上反复消耗。",
+    "harness": "WorkBuddy",
+    "hardware": {
+      "os": "Windows 10 22H2",
+      "cpu": "i5-10210U",
+      "gpu": "集成显卡 UHD",
+      "ram": "8GB"
+    },
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-24"
+  },
+  {
+    "id": "recipe-web-wcag-muted-contrast",
+    "title": "次级灰字对比度只有 3.06:1：看着「还行」实则不达 WCAG AA",
+    "tags": [
+      "design-system",
+      "a11y"
+    ],
+    "model": "Deepseek-V4.1-Flash",
+    "problem": "页面上的说明性小字（如统计项下方的解释文字）看着发飘、读不清，但肉眼判断不出到底合不合格。",
+    "dead_ends": [
+      {
+        "attempt": "靠肉眼比较几个灰色，凭感觉调",
+        "failure": "调完仍不确定是否达标，且容易把层级关系调乱",
+        "duration": "10min",
+        "early_signal": "对比度是可计算的量，不该用感觉判断"
+      },
+      {
+        "attempt": "只检查主文字色",
+        "failure": "主文字 5.9:1 合格，但次级色 #8b94a3 实测只有 3.06:1，小字号要求 ≥4.5:1，实际不达标",
+        "duration": "15min",
+        "early_signal": "越是「次要」的色越容易被漏检，而它们恰恰是最容易不达标的"
+      }
+    ],
+    "solution": "按 WCAG 相对亮度公式逐个色值计算对比度，把不达标的次级色调深：--muted-2 从 #8b94a3 改为 #6b7686，白底对比度 3.06:1 → 4.60:1，达到正文 4.5:1 的要求。",
+    "result": "全套色值实测：主文字 6.00:1、强调蓝 6.67:1、次级文字 4.60:1，全部通过 WCAG AA；可读性肉眼可见提升。",
+    "retrospective": "对比度要用公式算，不能目测。一个「看着还行」的灰，很可能正好卡在 3:1 附近而不自知。",
+    "harness": "WorkBuddy",
+    "hardware": {
+      "os": "Windows 10 22H2",
+      "cpu": "i5-10210U",
+      "gpu": "集成显卡 UHD",
+      "ram": "8GB"
+    },
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-24"
+  },
+  {
     "id": "recipe-yaml-frontmatter-colon",
     "title": "手写 YAML frontmatter 时 failure 含冒号被当键值分隔符，渲染/回读直接崩——改用 yaml.safe_dump",
     "tags": [

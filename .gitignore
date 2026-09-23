@@ -25,3 +25,6 @@ npm-debug.log*
 .vscode/
 .idea/
 *.swp
+
+# 网站离线兜底数据（由 api/experiences.json 生成；不入库以避免与单一真源漂移）
+assets/recipes-data.js

@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>解题配方库 · 机器可读的 AI 网页采集踩坑经验</title>
+  <meta name="description" content="一份机器可读、Agent 可直接消费的 AI 网页信息采集踩坑经验库。14 条真实配方，CI 自动校验，零域名泄漏。" />
+  <link rel="stylesheet" href="./assets/styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <!-- 顶部细进度/扫描：仅作必要状态指示，非装饰 -->
+  <div class="topbar" aria-hidden="true"></div>
+
+  <header class="site-header" id="top">
+    <a class="brand" href="#top" aria-label="解题配方库 首页">
+      <span class="brand-glyph" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 7l8-4 8 4-8 4-8-4z"/><path d="M4 12l8 4 8-4"/><path d="M4 17l8 4 8-4"/>
+        </svg>
+      </span>
+      <span class="brand-text">解题配方库<em>RecipeBook</em></span>
+    </a>
+    <nav class="nav">
+      <a href="#why">为什么</a>
+      <a href="#recipes">全部配方</a>
+      <a href="#contribute">贡献</a>
+      <a class="nav-gh" href="https://github.com/Laoyang4097/agent-recipe-book" target="_blank" rel="noopener">GitHub ↗</a>
+    </nav>
+  </header>
+
+  <main>
+    <!-- HERO -->
+    <section class="hero">
+      <div class="hero-copy reveal">
+        <p class="eyebrow">AI 网页采集 · 踩坑经验库</p>
+        <h1 class="hero-title">踩过的坑，<br />Agent 直接复用</h1>
+        <p class="hero-sub">
+          一份机器可读、Agent 可浏览的「解题配方」库。每一条都来自真实 <code>requests</code> 取证——
+          记录撞过的死胡同、提前避坑的信号，以及最终的解法。CI 每次提交自动校验，索引零漂移。
+        </p>
+
+        <div class="search-island" role="search">
+          <svg class="si-icon" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><circle cx="9" cy="9" r="6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M14 14l4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <input id="search" type="search" placeholder="描述你卡住的现象，例如：抓回来是乱码" autocomplete="off" />
+          <kbd class="si-kbd">回车</kbd>
+          <button class="si-cta" type="button" id="search-btn" aria-label="检索">检索</button>
+        </div>
+
+        <div class="pills" id="tags" aria-label="按标签筛选"></div>
+
+        <div class="suggest-row" id="suggest" hidden></div>
+
+        <p class="search-status" id="search-status" role="status" aria-live="polite" hidden></p>
+
+        <div class="hero-stats">
+          <div class="stat"><b id="stat-count">—</b><span>条真实配方</span></div>
+          <div class="stat-sep" aria-hidden="true"></div>
+          <div class="stat"><b class="ok">CI 绿</b><span>索引自动校验</span></div>
+          <div class="stat-sep" aria-hidden="true"></div>
+          <div class="stat"><b>MIT</b><span>开源可贡献</span></div>
+        </div>
+      </div>
+
+      <!-- 真实产品预览：直接渲染一条真实配方结构 -->
+      <div class="hero-preview reveal">
+        <div class="preview-frame">
+          <div class="preview-bar">
+            <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+            <span class="preview-url">agent-recipe-book · recipe-py-encoding-mojibake</span>
+          </div>
+          <div class="preview-body" id="preview-body">
+            <!-- 由 app.js 用真实数据填充 -->
+          </div>
+        </div>
+        <p class="preview-cap">↑ 真实配方在库中的样子：结构化死胡同 + 解法，Agent 一次读取即可复用</p>
+      </div>
+    </section>
+
+    <!-- BENTO 卖点 -->
+    <section class="why" id="why">
+      <h2 class="section-title reveal">为什么不一样</h2>
+      <p class="section-lead reveal">不是又一份「AI 工具清单」。我们交付的是可验证、可复用、机器直接能吃的结构化经验。</p>
+      <div class="bento">
+        <article class="bento-cell reveal">
+          <div class="bento-ico">✓</div>
+          <h3>真实取证，不编造</h3>
+          <p>每条配方都来自真实 <code>requests</code> 跑出来的坑，零域名泄漏，<code>dead_ends</code> 记录试错全过程。</p>
+        </article>
+        <article class="bento-cell reveal">
+          <div class="bento-ico">⚙</div>
+          <h3>CI 门禁零漂移</h3>
+          <p>每次提交自动重建索引并校验「真源 ↔ 派生物」一致，你看到的内容永远和仓库真值一致。</p>
+        </article>
+        <article class="bento-cell reveal">
+          <div class="bento-ico">⌁</div>
+          <h3>机器可读</h3>
+          <p>一份 <code>experiences.json</code> 全量结构化，Agent 直接 <code>GET</code> 后按标签/问题检索，跨会话复用。</p>
+        </article>
+        <article class="bento-cell reveal">
+          <div class="bento-ico">⚑</div>
+          <h3>开源可贡献</h3>
+          <p>MIT 协议。提交一条配方 = 提一个 PR，无需账号系统，治理规则写在仓库里。</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- 配方列表 -->
+    <section class="recipes" id="recipes">
+      <div class="recipes-head reveal">
+        <h2 class="section-title">全部配方</h2>
+        <p class="results" id="results">—</p>
+      </div>
+      <div class="recipe-grid" id="grid"></div>
+      <p class="empty" id="empty" hidden>没有匹配的配方，换个关键词或清空筛选试试。</p>
+    </section>
+  </main>
+
+  <footer class="site-footer" id="contribute">
+    <div class="foot-inner">
+      <div>
+        <p class="foot-brand">解题配方库 · RecipeBook</p>
+        <p class="foot-note">数据来源：仓库 <code>recipes/*.md</code> 单一真值源，由 <code>api/ingest.py</code> 重建为 <code>api/experiences.json</code>（CI 自动）。</p>
+      </div>
+      <div class="foot-contrib">
+        <p class="foot-strong">想补充一条踩坑？</p>
+        <p>提一个 PR，或在 <a href="https://github.com/Laoyang4097/agent-recipe-book" target="_blank" rel="noopener">GitHub</a> 开 issue。治理规则见 <code>docs/REPO-GOVERNANCE.md</code>。</p>
+      </div>
+    </div>
+    <p class="foot-lic">MIT License · © 2026 Laoyang4097 · 卓越杯 AI 创新实践大赛 B 赛道</p>
+  </footer>
+
+  <!-- 详情抽屉 -->
+  <div class="drawer-backdrop" id="backdrop" hidden></div>
+  <aside class="drawer" id="drawer" aria-hidden="true" aria-label="配方详情">
+    <button class="drawer-close" id="drawer-close" aria-label="关闭">✕</button>
+    <div class="drawer-content" id="drawer-content"></div>
+  </aside>
+
+  <!-- 不引用 assets/recipes-data.js（离线兜底）：网站改为纯 fetch ./api/experiences.json，
+       该文件由 CI 从 recipes/ 单一真源自动重建，天然最新且不会漂移。 -->
+  <script src="./assets/app.js"></script>
+</body>
+</html>

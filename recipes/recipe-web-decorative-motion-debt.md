@@ -1,0 +1,40 @@
+---
+id: recipe-web-decorative-motion-debt
+title: 粒子背景+扫描线+均衡器：自己觉得科技感，实际是设计债
+tags:
+- design-system
+- motion
+model: Deepseek-V4.1-Flash
+problem: 初版为了「后现代科技感」加了粒子网络背景、顶部流动扫描线、品牌均衡器竖条，自我感觉良好，但整体观感像模板站。
+dead_ends:
+- attempt: 用粒子网络 + 渐变光晕营造科技感
+  failure: 这正是 2026 年被公开点名的「AI 生成模板」标配信号，反而削弱专业感
+  duration: 120min
+  early_signal: 同类站点千篇一律地使用同一批元素，说明它已从「设计选择」退化为「默认套路」
+- attempt: 用纯装饰 keyframe 提升「精致度」（扫描线、呼吸竖条）
+  failure: 它们不传达任何信息，属于被点名的 design debt；还会与内容争夺注意力
+  duration: 40min
+  early_signal: 问一个动效「回答了什么问题」，答不上来就是装饰
+solution: 全部删除。只保留功能性动效：滚动入场（IntersectionObserver）、hover 抬升反馈、状态变化提示。判断标准是「这条动效回答了什么问题」，答不上来即删。
+result: 删除后页面安静下来，内容成为主角；后续对比外部企业级标杆（Linear/Stripe/Vercel 一类）时，结构性差距从「不在一个级别」收敛到「同一档位」。
+retrospective: 装饰性动效是负债不是资产。判断标准很简单：问它「回答了什么问题」，答不上来就删。
+harness: WorkBuddy
+hardware:
+  os: Windows 10 22H2
+  cpu: i5-10210U
+  gpu: 集成显卡 UHD
+  ram: 8GB
+verified: true
+status: published
+seed: true
+contributor_id: anon-2f183a
+created_at: '2026-09-24'
+---
+
+## 背景与卡点
+
+初版为了「后现代科技感」加了粒子网络背景、顶部流动扫描线、品牌均衡器竖条，自我感觉良好，但整体观感像模板站。
+
+## 死胡同详解 / 解法步骤 / 复盘
+
+详见 frontmatter 结构化字段；此处供人深读。

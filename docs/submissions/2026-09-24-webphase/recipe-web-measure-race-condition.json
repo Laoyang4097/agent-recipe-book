@@ -1,0 +1,35 @@
+{
+  "id": "recipe-web-measure-race-condition",
+  "title": "测量竞态：元素在 1500ms 移除，我恰好在 1500ms 测量",
+  "tags": [
+    "web-verify"
+  ],
+  "model": "Deepseek-V4.1-Flash",
+  "problem": "验证「滚动到结果区后落点高亮是否触发」，报告 flash class = false，看起来功能没生效。",
+  "dead_ends": [
+    {
+      "attempt": "直接判定高亮逻辑没执行，准备改代码",
+      "failure": "反复读代码，逻辑是对的、class 也确实被加上了",
+      "duration": "15min",
+      "early_signal": "代码里 setTimeout(remove, 1500) 与测量时刻 1500ms 完全重合"
+    },
+    {
+      "attempt": "把测量时间往后推（1700ms）",
+      "failure": "仍然是 false，因为移除更早发生",
+      "duration": "5min",
+      "early_signal": "向后推只会更晚；应该向中间要状态"
+    }
+  ],
+  "solution": "在动画进行中（如 120ms）也抓一次状态，而不是只在终点测一次。最终报告同时输出「120ms 时=true / 1500ms 时=false」，既证明触发、也说明是瞬态。",
+  "result": "补测 120ms 后得到 flash class = true，确认落点提示正常触发；此前 false 纯属测量竞态。",
+  "retrospective": "验证瞬态行为要测「过程中的状态」。只在终点测一次，等于用终点去否证起点。",
+  "harness": "WorkBuddy",
+  "hardware": {
+    "os": "Windows 10 22H2",
+    "cpu": "i5-10210U",
+    "gpu": "集成显卡 UHD",
+    "ram": "8GB"
+  },
+  "verified": true,
+  "status": "published"
+}

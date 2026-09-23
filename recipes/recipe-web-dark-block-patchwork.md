@@ -1,0 +1,39 @@
+---
+id: recipe-web-dark-block-patchwork
+title: 白底页面上硬贴一块深色搜索框：像补丁，不像设计
+tags:
+- design-system
+model: Deepseek-V4.1-Flash
+problem: 为了制造视觉焦点，在纯白页面上放了一个深色圆角搜索框。单看很酷，整体却像贴了块膏药，与页面气质割裂。
+dead_ends:
+- attempt: 用高对比深色块做视觉焦点
+  failure: 页面其余部分都是白底细线，深色块没有设计语言支撑，读起来像第三方组件被嵌进来
+  duration: 30min
+  early_signal: 如果这个元素单独拿出来和周围没有任何共同元素，多半是拼凑
+- attempt: 降低深色块的饱和度来缓和
+  failure: 仍是「一块不同颜色的东西」，割裂感只减轻不消失
+  duration: 15min
+  early_signal: 问题在「用色块做层级」这个思路本身，不在色值
+solution: 回归层级手段做焦点：白底 + 清晰边框 + 聚焦时的强调色光环 + 字重/字号对比。用「层级」而不是「色块」表达重要性。
+result: 搜索区与页面其余部分共用同一套边框、圆角与强调色，整体感显著提升；聚焦时的光环又足够明确。
+retrospective: 用色块做焦点是偷懒；用层级（边框、阴影、字重、留白）做焦点才是设计。前者是拼凑，后者是系统。
+harness: WorkBuddy
+hardware:
+  os: Windows 10 22H2
+  cpu: i5-10210U
+  gpu: 集成显卡 UHD
+  ram: 8GB
+verified: true
+status: published
+seed: true
+contributor_id: anon-2f183a
+created_at: '2026-09-24'
+---
+
+## 背景与卡点
+
+为了制造视觉焦点，在纯白页面上放了一个深色圆角搜索框。单看很酷，整体却像贴了块膏药，与页面气质割裂。
+
+## 死胡同详解 / 解法步骤 / 复盘
+
+详见 frontmatter 结构化字段；此处供人深读。

@@ -1,0 +1,41 @@
+---
+id: recipe-web-lineclamp-vs-highlight
+title: 截断与高亮打架：命中词被 line-clamp 藏掉，结果显得莫名其妙
+tags:
+- frontend
+- css
+- search
+model: Deepseek-V4.1-Flash
+problem: 卡片摘要用 JS slice 按字符硬切，结尾断在「默认 python-requests U...」这种怪位置；加搜索高亮后更严重 —— 命中词若落在视觉截断之外，用户看到一条结果却找不到它为什么在。
+dead_ends:
+- attempt: 用 slice(0, 96) 控制摘要长度
+  failure: 按字符数切断，断点与视觉行数无关，出现「U...」「re...」这类难看的断尾
+  duration: 10min
+  early_signal: 字符数不等于行数，容器宽度会变、字体也会变
+- attempt: 改成 CSS -webkit-line-clamp:2 优雅省略
+  failure: 截断变好看了，但视觉上只显示约 40-50 字，而 slice 仍允许 180 字，命中词被截在视野外，高亮看不见
+  duration: 20min
+  early_signal: 截断与高亮是两个会互相打架的需求，改完一个要回头验证另一个
+solution: ① 视觉截断交给 CSS -webkit-line-clamp，JS 的 slice 只作为超长兜底；② 增加片段定位：先算出命中词在原文中的最早位置，若位置太靠后就以它为起点截取片段（前面补省略号），保证命中词落在可见区内。
+result: 摘要从「抓某公开 HTTP 测试服务返回的压缩响应…」（看不到命中词）变为「…r 字节、r.text 是乱码，却不报错。」，命中词与高亮同屏可见。
+retrospective: 截断和高亮是两个会打架的需求。谁负责截断，谁就必须知道「哪一段最重要」—— 否则精心做的高亮会被截掉，结果比不做还糟。
+harness: WorkBuddy
+hardware:
+  os: Windows 10 22H2
+  cpu: i5-10210U
+  gpu: 集成显卡 UHD
+  ram: 8GB
+verified: true
+status: published
+seed: true
+contributor_id: anon-2f183a
+created_at: '2026-09-24'
+---
+
+## 背景与卡点
+
+卡片摘要用 JS slice 按字符硬切，结尾断在「默认 python-requests U...」这种怪位置；加搜索高亮后更严重 —— 命中词若落在视觉截断之外，用户看到一条结果却找不到它为什么在。
+
+## 死胡同详解 / 解法步骤 / 复盘
+
+详见 frontmatter 结构化字段；此处供人深读。

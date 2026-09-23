@@ -15,6 +15,21 @@
 - recipes/recipe-py-spa-empty-shell.md: requests 抓某短视频站首页：200 却返回 <body></body>，正文 0 字符、99.9% 是 JS — 可跑要点：① 先做『SPA 空壳体检』——抓完后计算 body 内去标签文本长度
 - recipes/recipe-py-table-merged-cells.md: requests 解析含 rowspan/colspan 的表格：每行单元格数参差 [3,4,5,...]，列直接错位 — 可跑要点：① 不要用『每行 td 数』当列数；先按 rowspan/colspa
 - recipes/recipe-py-ua-diff-nonbrowser.md: requests 默认 UA 遭差异对待：同 200 却 290 字符 vs 17626 字符正文，另有 403/444/跳登录 — 可跑要点：① 抓取前统一显式设置浏览器 UA（Chrome UA + Accep
+- recipes/recipe-web-cjk-substring-search.md: 中文搜索用整串 includes 匹配：自然语言查询必然 0 结果 — 中文按 2-gram 切分、英文数字按词切分，任一命中即算匹配（OR 语义），按
+- recipes/recipe-web-dark-block-patchwork.md: 白底页面上硬贴一块深色搜索框：像补丁，不像设计 — 回归层级手段做焦点：白底 + 清晰边框 + 聚焦时的强调色光环 + 字重/字号对
+- recipes/recipe-web-decorative-motion-debt.md: 粒子背景+扫描线+均衡器：自己觉得科技感，实际是设计债 — 全部删除。只保留功能性动效：滚动入场（IntersectionObserver）
+- recipes/recipe-web-desktop-clip-mistaken-mobile.md: 把「桌面布局的左半被裁」误认为「移动端渲染」 — 一个诊断 wrapper 只测一个宽度；若必须复用，每次截图前显式重置 ifra
+- recipes/recipe-web-feedback-outside-viewport.md: 搜索结果在视口外且无即时反馈：用户以为按钮坏了 — 三件套：① 在搜索框正下方（用户当前视野内）放即时反馈条，显示「筛出 N 条 +
+- recipes/recipe-web-focus-vs-scroll-conflict.md: input.focus() 与滚动到结果打架：焦点把视口又拽回搜索框 — 移除滚动类操作里的 input.focus()。若确实需要保留输入便利性，应改为
+- recipes/recipe-web-headless-min-window-width.md: headless 浏览器有最小窗口宽度：--window-size=390 实际渲染成 496px — 不要用 --window-size 模拟移动端。改为：用一个固定 width:3
+- recipes/recipe-web-headless-profile-conflict.md: 连续跑多个 headless 实例报 exit 23：用户数据目录被抢占 — 给每个 headless 实例指定独立的 --user-data-dir（如 .
+- recipes/recipe-web-iframe-height-scroll-false-negative.md: iframe 高度≥内容高度时测不到滚动：scrollY 恒为 0 的假阴性 — 把验证用 iframe 的高度设为一个真实视口高度（如 1000px），确保内容
+- recipes/recipe-web-lineclamp-vs-highlight.md: 截断与高亮打架：命中词被 line-clamp 藏掉，结果显得莫名其妙 — ① 视觉截断交给 CSS -webkit-line-clamp，JS 的 sli
+- recipes/recipe-web-measure-race-condition.md: 测量竞态：元素在 1500ms 移除，我恰好在 1500ms 测量 — 在动画进行中（如 120ms）也抓一次状态，而不是只在终点测一次。最终报告同时输
+- recipes/recipe-web-playwright-download-throttled.md: Playwright 与 chromium 下载全被节流卡死：改用系统现成浏览器 — 放弃 Playwright 路线，改用系统里已安装的 Edge 的 headle
+- recipes/recipe-web-reduced-motion-degrade.md: 平滑滚动变「闪现」：prefers-reduced-motion 把位移降级了 — ① 显式控制滚动行为：读取 prefers-reduced-motion，red
+- recipes/recipe-web-thumbnail-misjudge.md: 缩略图看走眼：同一现象连续误判三次「移动端文字被裁」 — 用注入式探针取客观数据代替肉眼：document.documentElement
+- recipes/recipe-web-wcag-muted-contrast.md: 次级灰字对比度只有 3.06:1：看着「还行」实则不达 WCAG AA — 按 WCAG 相对亮度公式逐个色值计算对比度，把不达标的次级色调深：--mute
 - recipes/recipe-yaml-frontmatter-colon.md: 手写 YAML frontmatter 时 failure 含冒号被当键值分隔符，渲染/回读直接崩——改用 yaml.safe_dump — ① frontmatter 永远用 yaml.safe_dump(dict) 生
 
 ## 如何被 Agent 读取

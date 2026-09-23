@@ -1,0 +1,43 @@
+{
+  "id": "recipe-web-headless-min-window-width",
+  "title": "headless 浏览器有最小窗口宽度：--window-size=390 实际渲染成 496px",
+  "tags": [
+    "web-verify",
+    "headless",
+    "screenshot"
+  ],
+  "model": "Deepseek-V4.1-Flash",
+  "problem": "用 Edge/Chrome headless 的 --window-size=390,1000 截移动端图做响应式验证，看到的布局与真机不符，据此误判「移动端横向溢出」并白改了两轮 CSS。",
+  "dead_ends": [
+    {
+      "attempt": "--window-size=390,1000 直接截 390px 移动端",
+      "failure": "页面实际渲染宽度是 496px，媒体查询全部按 496 生效",
+      "duration": "20min",
+      "early_signal": "注入探针回读 document.documentElement.clientWidth 得到 496，而不是请求的 390"
+    },
+    {
+      "attempt": "认定是 CSS 横向溢出，给 grid 项加 min-width:0、改列宽",
+      "failure": "改完重截，「文字被裁」的现象一模一样 —— 因为根本不是 CSS 的问题",
+      "duration": "40min",
+      "early_signal": "scrollWidth 恒等于 clientWidth、overflow-x 为 visible，本就没有真实溢出"
+    },
+    {
+      "attempt": "换用 Chrome 的 --headless=new 模式",
+      "failure": "同样受最小窗口宽度限制",
+      "duration": "10min",
+      "early_signal": "这是 Windows 窗口管理器的最小尺寸约束，与 headless 新旧模式无关"
+    }
+  ],
+  "solution": "不要用 --window-size 模拟移动端。改为：用一个固定 width:390px 的 <iframe> 承载页面，再截整个外层窗口（窗口宽 520px 即可）。并在注入探针里同时回读 iframe.innerWidth 与 matchMedia('(max-width:600px)').matches，双重确认视口真的生效。",
+  "result": "改用 iframe 后实测 iframe.innerWidth=390、媒体查询按 390 正确命中；同一页面在 390px 与 1280px 下 scrollWidth 均等于视口宽，横向溢出为 0 —— 此前三次「被裁」判断全部被推翻。",
+  "retrospective": "截图工具的「看起来不对」和「真的不对」是两件事。任何与视口相关的视觉判断，都要先回读 clientWidth 确认测量装置本身是对的。",
+  "harness": "WorkBuddy",
+  "hardware": {
+    "os": "Windows 10 22H2",
+    "cpu": "i5-10210U",
+    "gpu": "集成显卡 UHD",
+    "ram": "8GB"
+  },
+  "verified": true,
+  "status": "published"
+}
