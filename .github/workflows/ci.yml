@@ -1,0 +1,42 @@
+# CI 门禁（REPO-GOVERNANCE.md §8）
+#
+# 设计原则：韧性优先，不阻塞迭代。
+# - 只校验「ingest 闭环能跑通 + 生成物可由真源复现」，不做「schema 版本严格门禁」。
+# - 理由：MVP 期 schema 还会调整；若用严格 schema 校验当门禁，每次调字段都会把自己挡在门外。
+# - 因此它防的是「真源 recipes/ 与派生物 llms.txt / experiences.json 漂移」这类真实风险，
+#   而不是「schema 变了」这种预期中的演进。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install pyyaml
+
+      - name: Rebuild indices (must not crash)
+        # ingest.py 自带 validate + roundtrip 闸门；rebuild 扫描 recipes/ 重建 llms.txt / experiences.json
+        run: python api/ingest.py rebuild
+
+      - name: Verify generated artifacts are reproducible
+        # 提交里带的就是「发布快照」(§6)。若有人手改了 llms.txt/experiences.json 却没重跑 rebuild，
+        # 这里会失败，提醒「先重跑 python api/ingest.py rebuild 再提交」。
+        run: |
+          if ! git diff --exit-code -- llms.txt api/experiences.json; then
+            echo "::error::llms.txt / api/experiences.json 与 recipes/ 真源不一致，请重跑 'python api/ingest.py rebuild' 并提交结果"
+            exit 1
+          fi
+        shell: bash
