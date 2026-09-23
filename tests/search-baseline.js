@@ -5,7 +5,7 @@
    退出码：任何一条 FAIL → 1（可直接挂 CI）
 
    基线（2026-09-24 实测，37 条）：
-     正例命中 4/4 ｜ 反例拒绝 1/1
+     正例命中 6/6 ｜ 反例拒绝 3/3 ｜ 单字符/纯虚词 0 命中 ｜ 元配方不抢 Top1
    改动 lib/search.js 后若此测试变红，说明排序/命中质量回退了。
    ============================================================ */
 
@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
   searchRecipes, tokenize, listTags, GROUPS,
-  HINT_NO_MATCH, HINT_TOO_SHORT, MIN_TOKEN_LEN,
+  HINT_NO_MATCH, HINT_TOO_SHORT, HINT_NO_KEYWORD, STOPWORDS, MIN_TOKEN_LEN,
 } from "../lib/search.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -104,6 +104,48 @@ const lower = searchRecipes(RECIPES, "抓回来是乱码 cookie");
 check("大小写不影响命中结果",
   upper.matched === lower.matched && upper.results[0]?.recipe.id === lower.results[0]?.recipe.id,
   `upper=${upper.matched} lower=${lower.matched}`);
+
+/* ---------------- 缺陷 D：功能词噪声 ----------------
+   背景：中文 2-gram 会把「为什么」切成 为什/什么，
+   「什么」于是命中正文里恰好写过「什么问题 / 为什么在」的配方 ——
+   导致「为什么我的猫不吃饭」返回「粒子背景是设计债」这类风马牛不相及的条目。 */
+section("二·B、功能词噪声（缺陷 D）");
+for (const q of ["为什么我的猫不吃饭", "我的猫今天心情怎么样"]) {
+  const res = searchRecipes(RECIPES, q);
+  check(`纯口语问句 0 命中「${q}」`, res.matched === 0, `matched=${res.matched}`);
+}
+{
+  const res = searchRecipes(RECIPES, "为什么我的猫不吃饭");
+  check("停用词不进入 terms（「什么 / 为什」已被剔除）",
+    res.terms.every((t) => !STOPWORDS.has(t)) && !res.terms.includes("什么") && !res.terms.includes("为什"),
+    JSON.stringify(res.terms));
+  check("整句都是虚词时给出 HINT_NO_KEYWORD（不是笼统的「没匹配」）",
+    searchRecipes(RECIPES, "我的").hint === HINT_NO_KEYWORD,
+    JSON.stringify(searchRecipes(RECIPES, "我的").hint));
+}
+
+/* 反向：同一句话里含真实现象时必须命中 —— 停用词过滤不能误伤真实提问 */
+for (const c of [
+  { q: "请问我的爬虫为什么被封了", must: "recipe-py-antibot-stop-on-hit" },
+  { q: "那个网站抓下来是乱码怎么办", must: "recipe-py-encoding-mojibake" },
+]) {
+  const res = searchRecipes(RECIPES, c.q, { limit: 3 });
+  const rank = res.results.findIndex((x) => x.recipe.id === c.must) + 1;
+  check(`口语问句含真实现象仍命中「${c.q}」`, res.matched > 0 && rank >= 1,
+    `matched=${res.matched} 目标排名=${rank || "未进 Top3"}`);
+}
+
+/* ---------------- 缺陷 E：英文短词穿透单词边界 ----------------
+   背景：查 "ip" 曾命中 10 条 —— 其中 19 处 "ip" 其实出现在 "gzip" 内部。 */
+section("二·C、英文词边界（缺陷 E）");
+{
+  const ipRes = searchRecipes(RECIPES, "ip", { limit: 20 });
+  check("查「ip」不再命中含 gzip 的配方（要求词首边界）", ipRes.matched === 0, `matched=${ipRes.matched}`);
+  const gz = searchRecipes(RECIPES, "gzip", { limit: 20 });
+  check("查「gzip」仍能正常命中", gz.matched >= 1, `matched=${gz.matched}`);
+  const enc = searchRecipes(RECIPES, "encoding", { limit: 20 });
+  check("前缀匹配仍保留（不因加边界而丢召回）", enc.matched >= 1, `matched=${enc.matched}`);
+}
 
 /* ---------------- 空查询 / 无效查询 ---------------- */
 section("三、空查询与无效查询");

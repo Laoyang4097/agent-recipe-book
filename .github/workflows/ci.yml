@@ -49,7 +49,13 @@ jobs:
       - name: Search quality regression (must pass)
         # lib/search.js 是网站 / MCP Server / 演示 Agent 共用的检索内核。
         # 本测试锁住一条质量基线，防止「改了排序却没人发现」：
-        #   正例命中 4/4 ｜ 反例拒绝 1/1 ｜ 单字符查询不命中全库 ｜ 元配方不抢 Top1
-        # 失败即说明打分权重或同义词表回退了，不要靠「看起来还行」放过。
+        #   正例 6/6 ｜ 反例 3/3 ｜ 单字符与纯虚词 0 命中 ｜ 元配方不抢 Top1 ｜ 英文短词不穿透单词边界
+        # 失败即说明打分权重、停用词表或同义词表回退了，不要靠「看起来还行」放过。
         run: node tests/search-baseline.js
+        shell: bash
+
+      - name: MCP server smoke test (must pass)
+        # 真的 spawn 一个 mcp/server.js 子进程、走 stdio 说 JSON-RPC，断言：
+        #   握手 / 三个工具 / 检索正确性 / 参数校验 / 只读边界 / 数据源缺失不冒充空库
+        run: node tests/mcp-smoke.js
         shell: bash

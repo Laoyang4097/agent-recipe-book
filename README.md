@@ -40,7 +40,7 @@ curl https://raw.githubusercontent.com/Laoyang4097/agent-recipe-book/main/docs/e
 | 路径 | 适合 | 怎么做 |
 |---|---|---|
 | **自己来读** | 人类、会联网的 Agent、开发者 | 抓 `llms.txt`（索引）或 `api/experiences.json`（全量）；网页可直接浏览搜索 |
-| **挂载调用** | 默认不联网的 Agent | 规划中：只读 MCP Server（`search_recipes` / `get_recipe` / `list_tags`）。规格见 PRD 增量 v1.2 §7 |
+| **挂载调用** | 默认不联网的 Agent | 只读 MCP Server：`node mcp/server.js`（stdio、零依赖），暴露 `search_recipes` / `get_recipe` / `list_tags`。**挂载说明见 [mcp/README.md](mcp/README.md)** |
 
 ## 目录结构
 
@@ -57,7 +57,8 @@ agent-recipe-book/
 ├── recipes/           # 每条配方一个 .md（内容真源，frontmatter 权威）
 ├── assets/            # 网页样式与脚本（app.js 以 ES Module 加载）
 ├── lib/               # ★ 共享检索内核 search.js —— 网站 / MCP / Agent 一份实现
-├── tests/             # 检索质量回归测试（node tests/search-baseline.js）
+├── mcp/               # ★ 只读 MCP Server（server.js + 挂载说明 README.md）
+├── tests/             # 回归测试（search-baseline.js / mcp-smoke.js）
 ├── api/
 │   ├── ingest.py      # JSON→.md 渲染 + rebuild 索引（核心脚本）
 │   └── experiences.json   # 全量结构化数据（由 recipes/ 派生，网页与 Agent 消费）
@@ -76,13 +77,20 @@ agent-recipe-book/
 cd agent-recipe-book
 python -m http.server 8099      # 然后打开 http://127.0.0.1:8099/
 
-# 检索质量回归测试（零依赖；退出码非 0 表示命中/排序回退）
-node tests/search-baseline.js   # 等价于 npm test
+# 跑全部回归测试（零依赖；退出码非 0 = 回退）
+npm test                        # = test:search + test:mcp
+
+# 单跑某一个
+node tests/search-baseline.js   # 46 项：检索质量基线
+node tests/mcp-smoke.js         # 42 项：MCP 协议 / 工具 / 校验 / 只读边界
+
+# 起 MCP Server（stdio）
+node mcp/server.js              # 挂载说明见 mcp/README.md
 ```
 
 > **`lib/search.js` 是网站、MCP Server、演示 Agent 共用的检索内核**——三处同一份实现，避免各写一份后互相漂移。
-> 它锁住了一条质量基线：**正例 4/4、反例 1/1、单字符查询不命中全库、元配方不抢 Top1**。
-> 改动这个文件后必须先跑回归测试，CI 也会跑。基线数据与方案演进见 PRD 增量 v1.2 §6.3 / §6.5。
+> 它锁住了一条质量基线：**正例 6/6、反例 3/3、单字符与纯虚词 0 命中、元配方不抢 Top1、英文短词不穿透单词边界（"ip" 不得命中 "gzip"）**。
+> 改动这个文件后必须先跑回归测试，CI 会跑两个测试。基线数据与方案演进见 PRD 增量 v1.2 §6.3 / §6.5。
 
 ## 贡献
 
