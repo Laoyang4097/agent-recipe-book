@@ -55,7 +55,23 @@ selector, shadow-dom, pagination, rate-limit, auth-wall
 - `session` 会话/登录态 ｜ `headless` 无头浏览器 ｜ `selector` 选择器/解析
 - `shadow-dom` 影子 DOM/iframe ｜ `pagination` 翻页 ｜ `rate-limit` 限流/封禁 ｜ `auth-wall` 登录墙
 
+**第二垂直（试收，2026-09-24 起）：「用 AI 做项目判断」**
+
+上文「单一垂直」是**收录偏好**，不是结构约束。2026-09-24 试收第二垂直，目的是验证
+**字段设计是否与领域无关**（结论：是 —— 字段与代码一行未改）。词表：
+
+```
+project-judgment, verify-before-claim, planning, estimation
+```
+
+- `project-judgment` 项目/需求判断 ｜ `verify-before-claim` 引用规则前先核原文
+- `planning` 排期与里程碑 ｜ `estimation` 估计与实测
+
+> 第二垂直的 `id` 前缀固定为 `recipe-pj-*`（网站按 id 前缀做领域分类）。
+> 试收期若结论为「形态不匹配」，删掉对应配方与本段即可回退，**不影响已锁的字段结构**。
+
 > 本表只约束 MVP 期收录偏好，**不修改字段结构**（v3.0 已锁）。赛后扩垂直只需放宽此词表。
+> 2026-09-24 实测印证：**扩一个垂直，字段与既有代码逻辑一行都不用改** —— 只需加词表 + 加一条 id 前缀分组（见 `lib/search.js` 的 `GROUPS`）。
 
 ---
 
