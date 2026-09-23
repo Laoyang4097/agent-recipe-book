@@ -1,0 +1,15 @@
+{
+  "name": "agent-recipe-book",
+  "version": "1.0.0",
+  "private": true,
+  "description": "解题配方库 · 机器可读的踩坑经验库（网站 + MCP Server + 演示 Agent）",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node tests/search-baseline.js",
+    "mcp": "node mcp/server.js"
+  }
+}

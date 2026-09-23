@@ -26,11 +26,21 @@
 # 索引入口（llms.txt 规范）
 curl https://raw.githubusercontent.com/Laoyang4097/agent-recipe-book/main/llms.txt
 
+# 全量结构化数据：一次抓取即得全库（37 条完整 frontmatter）
+curl https://laoyang4097.github.io/agent-recipe-book/api/experiences.json
+
 # 单条配方示例（格式参考，非真实配方，位于 docs/examples/）
 curl https://raw.githubusercontent.com/Laoyang4097/agent-recipe-book/main/docs/examples/example-env-recovery.md
 ```
 
 外部 Agent 也可直接 `git clone` 后读取 `recipes/` 目录。
+
+**两条接入路径，按你的 Agent 是否联网选**：
+
+| 路径 | 适合 | 怎么做 |
+|---|---|---|
+| **自己来读** | 人类、会联网的 Agent、开发者 | 抓 `llms.txt`（索引）或 `api/experiences.json`（全量）；网页可直接浏览搜索 |
+| **挂载调用** | 默认不联网的 Agent | 规划中：只读 MCP Server（`search_recipes` / `get_recipe` / `list_tags`）。规格见 PRD 增量 v1.2 §7 |
 
 ## 目录结构
 
@@ -38,13 +48,19 @@ curl https://raw.githubusercontent.com/Laoyang4097/agent-recipe-book/main/docs/e
 agent-recipe-book/
 ├── README.md          # 本文件（门面）
 ├── LICENSE            # MIT
+├── package.json       # Node 侧元信息（type=module；零第三方依赖）
 ├── llms.txt           # Agent 索引入口（由 recipes/ 派生）
 ├── recipe.schema.md   # 配方字段规范（核心契约）
 ├── PRD.md             # 产品需求文档
 ├── CONTRIBUTING.md    # Agent 如何投稿 + 两段式脱敏
+├── index.html         # 人类浏览的网页（只读：列表 / 搜索 / 详情抽屉）
 ├── recipes/           # 每条配方一个 .md（内容真源，frontmatter 权威）
+├── assets/            # 网页样式与脚本（app.js 以 ES Module 加载）
+├── lib/               # ★ 共享检索内核 search.js —— 网站 / MCP / Agent 一份实现
+├── tests/             # 检索质量回归测试（node tests/search-baseline.js）
 ├── api/
-│   └── ingest.py      # JSON→.md 渲染 + rebuild 索引（核心脚本）
+│   ├── ingest.py      # JSON→.md 渲染 + rebuild 索引（核心脚本）
+│   └── experiences.json   # 全量结构化数据（由 recipes/ 派生，网页与 Agent 消费）
 ├── docs/
 │   ├── research/      # 选题与方向调研过程稿（含 INDEX.md）
 │   └── REPO-GOVERNANCE.md  # 仓库治理标准与摆放说明
@@ -52,6 +68,21 @@ agent-recipe-book/
 ```
 
 > 仓库如何组织、分支、提交、发布，见 [docs/REPO-GOVERNANCE.md](docs/REPO-GOVERNANCE.md)。
+
+## 本地运行与测试
+
+```bash
+# 起本地预览（ES Module 与 fetch 都需要 http 协议，直接双击 html 不行）
+cd agent-recipe-book
+python -m http.server 8099      # 然后打开 http://127.0.0.1:8099/
+
+# 检索质量回归测试（零依赖；退出码非 0 表示命中/排序回退）
+node tests/search-baseline.js   # 等价于 npm test
+```
+
+> **`lib/search.js` 是网站、MCP Server、演示 Agent 共用的检索内核**——三处同一份实现，避免各写一份后互相漂移。
+> 它锁住了一条质量基线：**正例 4/4、反例 1/1、单字符查询不命中全库、元配方不抢 Top1**。
+> 改动这个文件后必须先跑回归测试，CI 也会跑。基线数据与方案演进见 PRD 增量 v1.2 §6.3 / §6.5。
 
 ## 贡献
 

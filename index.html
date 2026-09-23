@@ -144,7 +144,8 @@
   </aside>
 
   <!-- 不引用 assets/recipes-data.js（离线兜底）：网站改为纯 fetch ./api/experiences.json，
-       该文件由 CI 从 recipes/ 单一真源自动重建，天然最新且不会漂移。 -->
-  <script src="./assets/app.js?v=20260924"></script>
+       该文件由 CI 从 recipes/ 单一真源自动重建，天然最新且不会漂移。
+       本脚本以 ES Module 加载，因为检索逻辑走 lib/search.js 共享内核（网站/MCP/Agent 一份实现）。 -->
+  <script type="module" src="./assets/app.js?v=20260925"></script>
 </body>
 </html>

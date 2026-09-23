@@ -40,3 +40,16 @@ jobs:
             exit 1
           fi
         shell: bash
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Search quality regression (must pass)
+        # lib/search.js 是网站 / MCP Server / 演示 Agent 共用的检索内核。
+        # 本测试锁住一条质量基线，防止「改了排序却没人发现」：
+        #   正例命中 4/4 ｜ 反例拒绝 1/1 ｜ 单字符查询不命中全库 ｜ 元配方不抢 Top1
+        # 失败即说明打分权重或同义词表回退了，不要靠「看起来还行」放过。
+        run: node tests/search-baseline.js
+        shell: bash

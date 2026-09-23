@@ -1,4 +1,9 @@
-/* 解题配方库 · 网站 v3 逻辑（零依赖原生 JS） */
+/* 解题配方库 · 网站 v3 逻辑（零依赖原生 JS）
+   检索逻辑统一走 lib/search.js 共享内核 —— 网站 / MCP Server / 演示 Agent
+   三处共用同一份实现，避免各写一份后互相漂移（PRD v1.2 §6.1）。
+   注意：本文件以 type="module" 加载，import 必须在 IIFE 之外。 */
+import { TAG_HINTS, GROUPS, searchRecipes } from "../lib/search.js";
+
 (function () {
   "use strict";
   const $ = (s, r = document) => r.querySelector(s);
@@ -7,29 +12,6 @@
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
     );
 
-  /* 同义词 → 真实标签 的提示表（键取自仓库真实 tags 词表，非编造） */
-  const TAG_HINTS = {
-    "encoding": ["编码", "乱码", "charset", "gbk", "utf8", "mojibake"],
-    "anti-bot": ["反爬", "风控", "被封", "403", "拦截", "指纹"],
-    "timing": ["超时", "重定向", "tls", "握手", "很慢"],
-    "session": ["会话", "cookie", "登录", "302", "跳转"],
-    "headless": ["无头", "浏览器", "动态渲染", "javascript"],
-    "selector": ["选择器", "表格", "合并单元格", "解析", "结构"],
-    "pagination": ["翻页", "分页", "页码", "页数"],
-    "rate-limit": ["限流", "频率", "太快", "429", "请求过多"],
-    "auth-wall": ["登录墙", "鉴权", "权限", "需要登录"],
-    "scrape": ["抓取", "采集", "爬虫", "下载"],
-    "shadow-dom": ["影子", "web component", "组件"],
-  };
-
-  /* 领域分类：按 id 前缀划分，与 recipe.schema.md §1.1 的三类构成一致 */
-  const GROUPS = [
-    { key: "all", label: "全部", match: () => true },
-    { key: "collect", label: "采集", match: (r) => /^recipe-py-/.test(r.id) },
-    { key: "web", label: "网站工程", match: (r) => /^recipe-web-/.test(r.id) },
-    // 兜底：既不是采集(Python)也不是网站工程的，一律归工具链/基础设施
-    { key: "infra", label: "工具链", match: (r) => !/^recipe-(py|web)-/.test(r.id) },
-  ];
   let activeGroup = "all";
 
   /* 当前生效的领域；有搜索词时跨全部领域（找东西不该被领域挡住） */
@@ -49,8 +31,9 @@
       if (!res.ok) throw new Error("http " + res.status);
       RECIPES = await res.json();
     } catch (e) {
-      RECIPES = window.__RECIPES_FALLBACK__ || [];
-      console.warn("载入远程数据失败，使用离线兜底：", e.message);
+      // 不再有离线兜底数据（assets/recipes-data.js 已从仓库移除，避免与单一真源漂移）。
+      // 载入失败就如实失败，不假装"库是空的"（PRD v1.2 §9 边界 #8）。
+      console.error("载入 api/experiences.json 失败：", e.message);
     }
     RECIPES.sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
     boot();
@@ -133,28 +116,8 @@
     }
   }
 
-  /* 关键词拆解：中文按 2-gram 切、英文数字按词切。
-     解决"用户输入整句中文（如『抓回来是乱码』）整串匹配必然搜不到"的问题。 */
-  function tokenize(q) {
-    const out = new Set();
-    q.split(/[\s,，、。;；:：!！?？/|（）()\[\]"'“”]+/).filter(Boolean).forEach((seg) => {
-      out.add(seg);
-      if (/[\u4e00-\u9fa5]/.test(seg)) {
-        for (let i = 0; i + 2 <= seg.length; i++) out.add(seg.slice(i, i + 2));
-      }
-    });
-    // 丢弃无意义的单字（除非是英文/数字）
-    return [...out].filter((t) => t.length >= 2 || /[a-z0-9]/i.test(t));
-  }
-
-  function hayOf(r) {
-    return (
-      (r.title || "") + " " + (r.problem || "") + " " + (r.tags || []).join(" ") + " " +
-      (r.dead_ends || []).map((d) =>
-        (d.attempt || "") + " " + (d.failure || "") + " " + (d.early_signal || "")
-      ).join(" ") + " " + (r.solution || "")
-    ).toLowerCase();
-  }
+  /* 切词 / 可搜索文本 / 打分 已统一到 lib/search.js 共享内核，
+     本文件不再保留重复实现（否则三处必然漂移）。 */
 
   function escRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
 
@@ -220,46 +183,28 @@
     });
   }
 
-  /* 命中数：任一关键词命中即算匹配（OR），结果按命中数降序 —— 宁可多给相关项，不空手 */
-  function hitCount(r, terms) {
-    const hay = hayOf(r);
-    const title = (r.title || "").toLowerCase();
-    let n = 0;
-    for (const t of terms) {
-      if (hay.includes(t)) n++;
-      if (title.includes(t)) n += 2; // 标题命中加权，让最相关的排最前
-    }
-    return n;
-  }
-
-  function currentList() {
-    let list = RECIPES.filter(groupOf().match).filter(
-      (r) => !activeTags.size || [...activeTags].every((t) => (r.tags || []).includes(t))
-    );
-    if (query) {
-      const terms = tokenize(query);
-      list = terms.length
-        ? list
-            .map((r) => ({ r, n: hitCount(r, terms) }))
-            .filter((x) => x.n > 0)
-            .sort((a, b) => b.n - a.n)
-            .map((x) => x.r)
-        : [];
-    }
-    return list;
+  /* 检索统一走共享内核（lib/search.js）：
+     领域过滤 → 标签过滤 → 中文 2-gram 切词 → 同义词扩展 → 打分排序 → 截断。
+     返回 { terms, synTags, matched, results:[{score,recipe}], hint }，由 render() 消费。 */
+  function runSearch() {
+    return searchRecipes(RECIPES, query, {
+      tags: [...activeTags],
+      predicate: groupOf().match,
+    });
   }
 
   function render() {
     const grid = $("#grid");
-    const list = currentList();
-    const terms = query ? tokenize(query) : [];
+    const res = runSearch();
+    const list = res.results.map((x) => x.recipe);
+    const terms = res.terms;
     const filtering = activeTags.size > 0 || !!query || activeGroup !== "all";
     $("#results").textContent = filtering
-      ? `匹配 ${list.length} 条 · 共 ${RECIPES.length} 条`
+      ? `匹配 ${res.matched} 条 · 共 ${RECIPES.length} 条`
       : `共 ${RECIPES.length} 条`;
     grid.innerHTML = "";
     $("#empty").hidden = list.length > 0;
-    updateStatus(list);
+    updateStatus(res, list);
     renderSuggest();
     list.forEach((r) => {
       const card = document.createElement("article");
@@ -283,8 +228,9 @@
     });
   }
 
-  /* 搜索/筛选的即时反馈：显示在 Hero 视口内，用户不必下翻才知道筛出来了 */
-  function updateStatus(list) {
+  /* 搜索/筛选的即时反馈：显示在 Hero 视口内，用户不必下翻才知道筛出来了。
+     空结果的原因由内核给出（res.hint：太短 / 无匹配），比页面自己猜准确。 */
+  function updateStatus(res, list) {
     const box = $("#search-status");
     if (!box) return;
     const filtering = activeTags.size > 0 || !!query || activeGroup !== "all";
@@ -294,8 +240,9 @@
     }
     box.hidden = false;
     if (list.length === 0) {
+      const why = (res && res.hint) || "没有匹配的配方。";
       box.innerHTML = query
-        ? `<span>没有匹配「<b>${esc(query)}</b>」的配方。</span><span class="ss-try">试试：编码 / 反爬 / 分页 / 会话</span>`
+        ? `<span>「<b>${esc(query)}</b>」${esc(why)}</span><span class="ss-try">试试：编码 / 反爬 / 分页 / 会话</span>`
         : `<span>这组标签下暂时没有配方。</span><span class="ss-try">去掉一个标签再试</span>`;
     } else {
       const parts = [];
