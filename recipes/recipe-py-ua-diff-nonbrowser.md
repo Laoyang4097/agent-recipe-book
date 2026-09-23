@@ -38,6 +38,7 @@ retrospective: UA 是『第一道门』：设了才有资格拿正常页；但�
 harness: Python requests
 verified: true
 status: published
+seed: true
 contributor_id: anon-2f183a
 created_at: '2026-09-23'
 ---

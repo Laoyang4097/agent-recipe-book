@@ -2,9 +2,6 @@
 > 人类解题经验的机器可读共享库。每条配方含 模型/skill/harness/硬件 与结构化死胡同。
 
 ## 索引
-- recipes/recipe-0002.md: browser-use 自动化卡在登录墙的破局（人过门槛 Agent 接手） — 改成"用户先手动登录，Agent 接管已登录 session"（持久化 brow
-- recipes/recipe-0001.md: 误删 shell 环境变量后快速还原（不重装） — 先取系统级 PATH 回灌当前会话；永久修复写回用户变量；动 PATH 前先备份
-- recipes/recipe-managed-python-env-pitfalls.md: 在 WorkBuddy 托管 Python 环境跑依赖脚本的坑（缺包 / 丢 git 身份 / cwd 不持久 / YAML 日期序列化） — ① 建隔离 venv 装依赖：`python -m venv .../envs/
 - recipes/recipe-py-antibot-stop-on-hit.md: 反爬遇即停：requests 默认 UA 撞 403+JS/DataDome 挑战与 Cloudflare 403，命中即弃、零绕过 — 可复用步骤：① 抓取任何站点第一条请求就用 try/except 包住，并显式 
 - recipes/recipe-py-content-encoding-double-decode.md: Content-Encoding 静默解压：requests 已自动解 gzip/deflate，手动再解一次即崩；br 未装库则静默乱码 — 可跑要点：① 默认别手动解压——requests 会自动处理 gzip/defl
 - recipes/recipe-py-encoding-mojibake.md: requests 抓中文站默认 r.encoding=ISO-8859-1 致乱码，用 apparent_encoding/content.decode 修复 — 别信 r.encoding。可跑要点：① 先看响应头是否带 charset；无 

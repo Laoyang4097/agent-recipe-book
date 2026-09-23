@@ -1,7 +1,10 @@
 {
   "id": "recipe-py-pagination-ignored-param",
   "title": "分页靠路径数字：?page=2 被静默忽略仍返回第1页，跨页还有约17.8%重复需去重",
-  "tags": ["pagination", "scrape"],
+  "tags": [
+    "pagination",
+    "scrape"
+  ],
   "model": "Agent+Python requests",
   "problem": "用 requests 抓某新闻门户『滚动新闻』列表翻 3 页时发现：改用 ?page=2 这类查询参数后服务端仍返回 HTTP 200、没有任何报错，内容却和第 1 页一模一样——分页被静默忽略。正确分页其实靠 URL 路径里的数字（/scroll-news/news1.html…newsN.html）。",
   "dead_ends": [
@@ -29,5 +32,6 @@
   "harness": "Python requests",
   "result": "对某新闻门户滚动列表实测：正确路径页 news1/2/3.html 分别 133/129/131 条，去重后 union=323 条；?page=2、?pageNo=2、?p=2、?offset=30 四种参数全部被静默忽略（identical_to_page1=true）；两两页重叠恒为 35 条，整体重复率 17.8%。",
   "retrospective": "分页有几件事永远别假设：翻页参数名、参数是否生效、页间是否重复。最稳的做法是『换一页→比对条目集合是否变化』来验证参数真的生效，再靠 URL 集合去重。这个门户接口对无效参数一律 200 且不报错，属于典型的静默失败，只有内容比对能抓到。",
-  "verified": true
+  "verified": true,
+  "seed": true
 }

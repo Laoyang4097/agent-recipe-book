@@ -1,7 +1,10 @@
 {
   "id": "recipe-py-table-merged-cells",
   "title": "requests 解析含 rowspan/colspan 的表格：每行单元格数参差 [3,4,5,...]，列直接错位",
-  "tags": ["scrape", "selector"],
+  "tags": [
+    "scrape",
+    "selector"
+  ],
   "model": "Agent+Python requests",
   "problem": "抓含合并单元格的公开表格后，按『每个 <tr> 的 <td> 数=列数』直接取数会错位：多行表头 + rowspan/colspan 让各行单元格数不一致，且部分表的 tbody 为空（数据靠 JS 填充），照常解析只能拿到表头。",
   "dead_ends": [
@@ -35,5 +38,6 @@
   "harness": "Python requests",
   "result": "某统计机构公报（1.43MB）含 4 表：数据表 221 行、逐行单元格数 [3,4,5,5...] 参差、colspan 3 处 + rowspan 1 处、空单元格 60 个、展开宽度 5，双行表头。某彩票开奖公告表表头 rowspan×6 + colspan×2 展开 10 列，但 tbody 为空、0 行数据。两站响应头编码均误报 ISO-8859-1（实为 utf-8）。",
   "retrospective": "表格的『列』不等于『每行 td 数』——合并单元格必须先展开网格再对齐。另外要先确认 tbody 到底有没有数据：静态表头 + 空 tbody 说明数据是后端接口给的，继续抠 HTML 是死路。",
-  "verified": true
+  "verified": true,
+  "seed": true
 }

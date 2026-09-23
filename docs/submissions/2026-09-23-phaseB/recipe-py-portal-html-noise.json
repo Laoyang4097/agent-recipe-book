@@ -1,7 +1,10 @@
 {
   "id": "recipe-py-portal-html-noise",
   "title": "requests 抓某新闻门户首页：导航/平台入口/广告噪声占七成，正则取 <a> 当标题不可用",
-  "tags": ["scrape", "selector"],
+  "tags": [
+    "scrape",
+    "selector"
+  ],
   "model": "Agent+Python requests",
   "problem": "用 requests 抓某新闻门户首页想提取文章标题，结果一个页面上 649 个链接里只有约 30% 像文章，大量导航、平台入口、广告位、多频道入口和重复模板混在一起，用正则或『抓所有 <a>』根本分不出正文。",
   "dead_ends": [
@@ -29,5 +32,6 @@
   "harness": "Python requests",
   "result": "对某新闻门户首页实测：HTML 113637 字节、649 个链接；按日期段过滤得 article_like=194（29.9%），nav_like=150，external=605，重复链接文本 8 组；script+style 占 21.6%。正则取 <a> 无法定位正文，必须用 URL 模式过滤 + 去重。",
   "retrospective": "门户首页不是『一页文章』而是一张导航地图：链接数 ≠ 文章数（本例虚高 3 倍）。先定型 URL 再写解析，比先写正则再打补丁省事得多；另外该门户同样命中 r.encoding=ISO-8859-1 / apparent=utf-8 的编码坑，取 r.text 前要修编码。",
-  "verified": true
+  "verified": true,
+  "seed": true
 }

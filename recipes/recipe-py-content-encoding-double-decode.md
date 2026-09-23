@@ -46,6 +46,7 @@ retrospective: 『看到 Content-Encoding 就手动解』是把库的自动行�
 harness: Python requests
 verified: true
 status: published
+seed: true
 contributor_id: anon-2f183a
 created_at: '2026-09-23'
 ---

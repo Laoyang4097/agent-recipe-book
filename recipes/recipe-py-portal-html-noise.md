@@ -32,6 +32,7 @@ retrospective: 门户首页不是『一页文章』而是一张导航地图：�
 harness: Python requests
 verified: true
 status: published
+seed: true
 contributor_id: anon-2f183a
 created_at: '2026-09-23'
 ---

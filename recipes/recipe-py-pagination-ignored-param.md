@@ -32,6 +32,7 @@ retrospective: 分页有几件事永远别假设：翻页参数名、参数是�
 harness: Python requests
 verified: true
 status: published
+seed: true
 contributor_id: anon-2f183a
 created_at: '2026-09-23'
 ---

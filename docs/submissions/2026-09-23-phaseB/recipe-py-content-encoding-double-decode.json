@@ -1,7 +1,10 @@
 {
   "id": "recipe-py-content-encoding-double-decode",
   "title": "Content-Encoding 静默解压：requests 已自动解 gzip/deflate，手动再解一次即崩；br 未装库则静默乱码",
-  "tags": ["encoding", "scrape"],
+  "tags": [
+    "encoding",
+    "scrape"
+  ],
   "model": "Agent+Python requests",
   "problem": "抓某公开 HTTP 测试服务返回的压缩响应(标准回显端点，路径如 /gzip、/deflate、/brotli)时，看到响应头 Content-Encoding: gzip，直觉认为『body 是压缩的、得自己解压』，于是对 r.content 调 gzip.decompress()——结果直接抛异常。真相是 requests 在底层已经透明解压，r.content 拿到的就是明文；bro 更隐蔽：响应头声明 Content-Encoding: br，但环境未装 brotli/requests 无法解，r.content 是原始 br 字节、r.text 是乱码，却不报错。",
   "dead_ends": [
@@ -35,5 +38,6 @@
   "harness": "Python requests",
   "result": "实测某公开测试服务：/gzip 响应 ce=gzip、len(content)=295、content[:12]=b'{\\n  \"gzipped'，手动 gzip.decompress 抛 BadGzipFile；/deflate 手动 zlib.decompress 抛 error -3；Accept-Encoding: br 抓 /brotli（ce=br、len=194、hex[:8]=1b1a01009c07b673），未装 brotli 时 r.text 为乱码、r.json() 抛 JSONDecodeError；Accept-Encoding: identity 被服务端无视，仍回 ce=gzip。",
   "retrospective": "『看到 Content-Encoding 就手动解』是把库的自动行为当成没做——requests 早已透明解压，手动再解只会崩或产出坏数据。反过来 br 这种需要额外库的编码，缺失时它又静默不报错，所以真正稳妥的是『先用 r.json()/r.text 试，异常或魔数不对再排查编码』，并给未解码产出入库加哨兵。",
-  "verified": true
+  "verified": true,
+  "seed": true
 }

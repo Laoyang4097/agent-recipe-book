@@ -38,6 +38,7 @@ retrospective: 反爬不是『技术难题』而是『合规边界』：requests
 harness: Python requests
 verified: true
 status: published
+seed: true
 contributor_id: anon-2f183a
 created_at: '2026-09-23'
 ---

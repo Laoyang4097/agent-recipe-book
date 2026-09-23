@@ -1,7 +1,11 @@
 {
   "id": "recipe-py-http-redirect-timeout-tls",
   "title": "requests HTTP 层真实现象：重定向拿空 body、连/读超时区分、gzip 自动解压、SSLError 与连接复用探针失效",
-  "tags": ["scrape", "timing", "session"],
+  "tags": [
+    "scrape",
+    "timing",
+    "session"
+  ],
   "model": "Agent+Python requests",
   "problem": "requests 把很多 HTTP 细节藏了起来，导致对『重定向/超时/压缩/TLS/连接复用』的行为判断出错：以为不跟随重定向能拿到内容（实际拿到 0 字节）、以为超时只有一种（实际连超时与读超时是两回事）、以为 Connection 头能证明连接复用（实测取不到）。",
   "dead_ends": [
@@ -29,5 +33,6 @@
   "harness": "Python requests",
   "result": "实测：/redirect/2 时 allow_redirects=True→200、history 2 跳、final=/get；allow_redirects=False→302/Location=/relative-redirect/1/body 0 字节。/delay/5 配 timeout=1.5→ReadTimeout；不可达 IP 10.255.255.1 配 timeout=1.5→ConnectTimeout@1.51s。/gzip→Content-Encoding=gzip、Content-Length=413、len(content)=771（已自动解压）。self-signed/expired 证书 verify=True→SSLError CERTIFICATE_VERIFY_FAILED，verify=False→200/502B。/brotli→501 Not Implemented。连接复用探针 session_ports/fresh_ports 全 null。",
   "retrospective": "requests 的『便利』会掩盖行为真相：不跟随重定向=空 body、超时是分阶段的、br 不是白送的、raw 私有属性会随版本变。排查网络问题时要把这条链路逐段显式化（history/Location、connect vs read、Content-Encoding、证书校验、池化统计），并且优先用公开 API 而不是私有属性观测。",
-  "verified": true
+  "verified": true,
+  "seed": true
 }

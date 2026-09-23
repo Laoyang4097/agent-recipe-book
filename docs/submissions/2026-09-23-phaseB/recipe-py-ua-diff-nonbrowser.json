@@ -1,7 +1,10 @@
 {
   "id": "recipe-py-ua-diff-nonbrowser",
   "title": "requests 默认 UA 遭差异对待：同 200 却 290 字符 vs 17626 字符正文，另有 403/444/跳登录",
-  "tags": ["anti-bot", "scrape"],
+  "tags": [
+    "anti-bot",
+    "scrape"
+  ],
   "model": "Agent+Python requests",
   "problem": "用 requests 默认 UA（python-requests/2.34.2）抓公开页，站方按 UA 差异处理：同一搜索站同为 200 却返回被裁剪的骨架页；问答站直接 403 JSON；短视频站 444；而有的站（代码托管）对 UA 完全不敏感。只看 status 会把残缺页当成功。",
   "dead_ends": [
@@ -35,5 +38,6 @@
   "harness": "Python requests",
   "result": "实测：某搜索站 默认UA 200/2,443B/正文290 vs 浏览器UA 200/29,506B/正文17,626；某问答站 默认UA 403 JSON(214B) vs 浏览器UA 302→signin；某短视频站 默认UA 444(115B) vs 浏览器UA 200(72,914B)；某代码托管站 两 UA 均 200 且正文均 144,263 字符（无差异）。",
   "retrospective": "UA 是『第一道门』：设了才有资格拿正常页；但设了不等于拿到内容——问答站仍撞登录墙、代码托管站根本不看 UA。判断成功与否要看正文长度/哈希而非 status，且必须逐站验证。",
-  "verified": true
+  "verified": true,
+  "seed": true
 }

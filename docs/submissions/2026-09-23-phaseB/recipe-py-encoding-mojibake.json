@@ -1,7 +1,10 @@
 {
   "id": "recipe-py-encoding-mojibake",
   "title": "requests 抓中文站默认 r.encoding=ISO-8859-1 致乱码，用 apparent_encoding/content.decode 修复",
-  "tags": ["encoding", "scrape"],
+  "tags": [
+    "encoding",
+    "scrape"
+  ],
   "model": "Agent+Python requests",
   "problem": "用 requests 抓某政务站首页，r.text 取回的中文全是 'ä¸æ¿åºç½' 一类乱码；而 r.encoding 默认给出 ISO-8859-1，页面实际是 UTF-8。坑点：当响应头 Content-Type 只有 'text/html'、不带 charset 时，requests 按 RFC 回退 ISO-8859-1，r.text 就静默乱码，不报任何异常。",
   "dead_ends": [
@@ -29,5 +32,6 @@
   "harness": "Python requests",
   "result": "对某政务站实测：r.text 得到乱码标题 'ä¸æ¿åºç½_ä¸å¤®äººæ°æ¿åºé¨æ·ç½ç«'；设 r.encoding=r.apparent_encoding(utf-8) 后，标题恢复为 '中国政府网_中央人民政府门户网站'，3/3 中文片段正常；r.content.decode('utf-8') 结果一致；charset_normalizer 判定 utf_8。",
   "retrospective": "三条忠告：a) 永远别用默认 r.text，改 r.content.decode(已知编码) 或先修 r.encoding；b) 别用『中文站=GBK』的经验硬套，先看 header/meta；c) 用 errors='replace' 兜底，避免一个坏字节让整批数据全灭。另注：本环境该站响应可慢至 60s，timeout 参数并不等于总耗时上限，长任务要放后台跑。",
-  "verified": true
+  "verified": true,
+  "seed": true
 }

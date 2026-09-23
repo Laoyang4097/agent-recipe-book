@@ -34,6 +34,7 @@ retrospective: 实体不是脏字符而是数据的一部分，忘 unescape 会�
 harness: Python requests
 verified: true
 status: published
+seed: true
 contributor_id: anon-2f183a
 created_at: '2026-09-23'
 ---

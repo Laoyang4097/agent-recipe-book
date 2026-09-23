@@ -1,7 +1,11 @@
 {
   "id": "recipe-py-ratelimit-silent-headers",
   "title": "连续请求限流观察：18 次全 200、0 个 429，限流却藏在 X-RateLimit-Remaining（57→43）与 CDN HIT/MISS 里",
-  "tags": ["scrape", "rate-limit", "timing"],
+  "tags": [
+    "scrape",
+    "rate-limit",
+    "timing"
+  ],
   "model": "Agent+Python requests",
   "problem": "判断『连续抓取会不会被限流』时，最容易只看 HTTP 状态：连续 15-18 次请求全部 200、没有 429，就下结论『该站不限流』。真跑发现这个结论不可靠——一个站用响应头静默计数限流（耗尽才拒绝），另一个站前 16 次全被 CDN 缓存挡下、根本没打到源站，状态码和耗时都毫无信息量。",
   "dead_ends": [
@@ -23,5 +27,6 @@
   "harness": "Python requests",
   "result": "实测：静态站 18 次全 200、0×429，cf-cache-status 16×HIT+2×MISS，MISS 耗时 1240/1211ms vs HIT≈286ms；API 站 15 次全 200、0×429，X-RateLimit-Remaining 由 57 递减至 43（Limit=60）。两站均未触发硬限流，但均存在可观测的限流/缓存信号。",
   "retrospective": "『没被限流』和『没看到限流信号』是两回事。真限流往往先静默计数（响应头）、再降速、最后才 429；而 CDN 缓存会把『压力测试』变成『读缓存』，让你误以为畅通。观察限流要盯响应头+耗时的趋势，而不是单看某一次的状态码。",
-  "verified": true
+  "verified": true,
+  "seed": true
 }

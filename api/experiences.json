@@ -1,149 +1,5 @@
 [
   {
-    "id": "recipe-0002",
-    "title": "browser-use 自动化卡在登录墙的破局（人过门槛 Agent 接手）",
-    "tags": [
-      "browser-automation",
-      "login",
-      "playwright",
-      "browser-use"
-    ],
-    "model": "Agent+agent-browser skill (WorkBuddy)",
-    "problem": "用 browser-use（或 agent-browser skill）让 Agent 自动登录某站点抓数据，页面有验证码/二次验证/弹窗，Agent 反复重试失败陷入死循环，还差点触发风控锁号。",
-    "dead_ends": [
-      {
-        "attempt": "让 Agent 自己填账号密码反复提交",
-        "failure": "触发风控，账号被临时锁，且 Agent 不报错只是\"继续重试\"",
-        "duration": "20min",
-        "early_signal": "连续 2 次 401 就该停，而不是继续硬刚"
-      },
-      {
-        "attempt": "Agent 截图 OCR 识别验证码",
-        "failure": "滑块/点选类验证码 OCR 根本识别不了，且违反站点 ToS",
-        "duration": "15min",
-        "early_signal": "这类验证码本就不该让 Agent 去攻破"
-      }
-    ],
-    "solution": "改成\"用户先手动登录，Agent 接管已登录 session\"（持久化 browser profile 或 cookie 注入）；加护栏连续 N 次非 2xx 或出现 captcha 关键词立即暂停；纯公开数据优先找官方 API/RSS/静态页。",
-    "result": "实测人工过登录门槛后，Agent 接管抓取稳定跑完，未再触发风控。",
-    "retrospective": "把\"Agent 攻破登录\"换成\"人过关键门槛、Agent 做重复劳动\"，职责分离；任何带 auth 的自动化都应设计失败熔断。",
-    "skills": [
-      "agent-browser"
-    ],
-    "harness": "WorkBuddy",
-    "hardware": {
-      "os": "Windows 10 19045",
-      "cpu": "Intel i5-10210U",
-      "gpu": "NVIDIA RTX 4060 8GB",
-      "ram": "8GB"
-    },
-    "agent_config": "强调\"遇到拦截先停，不要盲试，向用户要一次性凭证\"（已脱敏）",
-    "verified": true,
-    "status": "published",
-    "contributor_id": "anon-example-0002",
-    "created_at": "2026-09-23"
-  },
-  {
-    "id": "recipe-0001",
-    "title": "误删 shell 环境变量后快速还原（不重装）",
-    "tags": [
-      "env",
-      "recovery",
-      "powershell"
-    ],
-    "model": "Agent+PowerShell (WorkBuddy 沙箱)",
-    "problem": "在 Windows 上误执行覆盖 PATH 的操作，导致当前会话命令行找不到 node/python，重启终端后仍不完整。不想重装任何环境。",
-    "dead_ends": [
-      {
-        "attempt": "手动 set PATH 把记得的路径一个个拼回去",
-        "failure": "漏掉散落路径（npm global、python scripts、git bin），每次跑新命令又报\"不是内部或外部命令\"",
-        "duration": "40min",
-        "early_signal": "系统级 PATH 其实还在注册表里，直接从\"环境变量\"面板复制即可，不必手拼"
-      },
-      {
-        "attempt": "用 refreshenv（旧 Chocolatey 命令）刷新",
-        "failure": "本机没装 Chocolatey，命令不存在",
-        "duration": "5min",
-        "early_signal": "应先 where refreshenv 确认命令是否存在"
-      }
-    ],
-    "solution": "先取系统级 PATH 回灌当前会话；永久修复写回用户变量；动 PATH 前先备份。",
-    "result": "实测回灌后命令全部恢复，无需重装。",
-    "retrospective": "先分清会话级 vs 系统级 PATH——系统级没丢，回灌即可；任何环境变量被改坏都可从系统级回灌。",
-    "skills": [
-      "find-skills"
-    ],
-    "harness": "WorkBuddy",
-    "hardware": {
-      "os": "Windows 10 19045",
-      "cpu": "Intel i5-10210U",
-      "gpu": "NVIDIA RTX 4060 8GB",
-      "ram": "8GB"
-    },
-    "agent_config": "偏好\"先诊断再修复、给可复制命令\"的助手（已脱敏）",
-    "verified": true,
-    "status": "published",
-    "contributor_id": "anon-example-0001",
-    "created_at": "2026-09-23"
-  },
-  {
-    "id": "recipe-managed-python-env-pitfalls",
-    "title": "在 WorkBuddy 托管 Python 环境跑依赖脚本的坑（缺包 / 丢 git 身份 / cwd 不持久 / YAML 日期序列化）",
-    "tags": [
-      "python",
-      "venv",
-      "git",
-      "workbuddy",
-      "yaml",
-      "ci-cd"
-    ],
-    "model": "Agent+managed Python 3.13.12 (WorkBuddy 沙箱)",
-    "problem": "要在 WorkBuddy 沙箱里跑一个 Python 脚本（项目里的 api/ingest.py，需要 pyyaml 解析 frontmatter），并把改动提交推到 GitHub。结果连踩几个环境坑：脚本跑不起来、commit 被拒、路径解析错位、JSON 序列化崩。",
-    "dead_ends": [
-      {
-        "attempt": "直接 `python api/ingest.py rebuild`，指望 managed python 已带 pyyaml",
-        "failure": "ImportError: No module named yaml，rebuild 直接退出，experiences.json 没生成",
-        "duration": "2min",
-        "early_signal": "托管环境默认只有标准库，第三方包要先装；报错第一行就说了"
-      },
-      {
-        "attempt": "装完 pyyaml 后直接 `git commit`，没想身份问题",
-        "failure": "fatal: Author identity unknown，commit 被拒",
-        "duration": "1min",
-        "early_signal": "沙箱每次新会话 git 全局身份会丢，commit 前先给本仓库设局部 user.name/email"
-      },
-      {
-        "attempt": "用相对路径 `api/ingest.py` 跑，以为 cwd 还停在仓库目录",
-        "failure": "can't open file '.../api/ingest.py'：路径解析到了工作区根而非子目录",
-        "duration": "3min",
-        "early_signal": "Bash 工具的 cwd 不保证跨调用持久，脚本一律用绝对路径或先 cd 到仓库根"
-      },
-      {
-        "attempt": "装好 pyyaml 跑 rebuild，以为这次稳了",
-        "failure": "json.dump 抛 TypeError: Object of type date is not JSON serializable，experiences.json 只写一半(2066字节残档)",
-        "duration": "5min",
-        "early_signal": "YAML 把 `created_at: 2026-09-22` 解析成 date 对象，json 无法直接序列化；render/parse 后给 json.dump 加 default=str 兜底"
-      }
-    ],
-    "solution": "① 建隔离 venv 装依赖：`python -m venv .../envs/default && .../Scripts/pip install pyyaml`；② 给本仓库设局部 git 身份 `git config user.name/user.email`（仅本仓库，不污染全局）；③ 所有脚本调用用绝对路径或先 `cd` 到仓库根；④ 在 json.dump 加 `default=str` 兜底 YAML 日期对象。最终 `ingest.py rebuild` 正常生成 experiences.json + llms.txt，commit + PAT 内嵌 push 成功。",
-    "result": "ingest 闭环完整跑通：提交 JSON → 渲染 .md → 重建索引（experiences.json 含 3 条、llms.txt 公开 3 条），并已 push 到 GitHub main。",
-    "retrospective": "托管/隔离 Python 环境的第一性原理：标准库之外啥都没有，依赖要先显式装；git 身份、cwd 这些'我以为还在'的状态在沙箱会话间并不持久。把它们当'每次都要显式初始化'，而不是'应该已经在'。",
-    "skills": [
-      "bash",
-      "git",
-      "python-venv"
-    ],
-    "harness": "WorkBuddy agentic Bash + managed Python 3.13.12",
-    "hardware": {
-      "python": "3.13.12 managed",
-      "os": "win32 (Git Bash)"
-    },
-    "verified": true,
-    "status": "published",
-    "contributor_id": "anon-47856d",
-    "created_at": "2026-09-23"
-  },
-  {
     "id": "recipe-py-antibot-stop-on-hit",
     "title": "反爬遇即停：requests 默认 UA 撞 403+JS/DataDome 挑战与 Cloudflare 403，命中即弃、零绕过",
     "tags": [
@@ -173,6 +29,7 @@
     "harness": "Python requests",
     "verified": true,
     "status": "published",
+    "seed": true,
     "contributor_id": "anon-2f183a",
     "created_at": "2026-09-23"
   },
@@ -217,6 +74,7 @@
     "harness": "Python requests",
     "verified": true,
     "status": "published",
+    "seed": true,
     "contributor_id": "anon-2f183a",
     "created_at": "2026-09-23"
   },
@@ -255,6 +113,7 @@
     "harness": "Python requests",
     "verified": true,
     "status": "published",
+    "seed": true,
     "contributor_id": "anon-2f183a",
     "created_at": "2026-09-23"
   },
@@ -293,6 +152,7 @@
     "harness": "Python requests",
     "verified": true,
     "status": "published",
+    "seed": true,
     "contributor_id": "anon-2f183a",
     "created_at": "2026-09-23"
   },
@@ -332,6 +192,7 @@
     "harness": "Python requests",
     "verified": true,
     "status": "published",
+    "seed": true,
     "contributor_id": "anon-2f183a",
     "created_at": "2026-09-23"
   },
@@ -370,6 +231,7 @@
     "harness": "Python requests",
     "verified": true,
     "status": "published",
+    "seed": true,
     "contributor_id": "anon-2f183a",
     "created_at": "2026-09-23"
   },
@@ -408,6 +270,7 @@
     "harness": "Python requests",
     "verified": true,
     "status": "published",
+    "seed": true,
     "contributor_id": "anon-2f183a",
     "created_at": "2026-09-23"
   },
@@ -441,6 +304,7 @@
     "harness": "Python requests",
     "verified": true,
     "status": "published",
+    "seed": true,
     "contributor_id": "anon-2f183a",
     "created_at": "2026-09-23"
   },
@@ -479,6 +343,7 @@
     "harness": "Python requests",
     "verified": true,
     "status": "published",
+    "seed": true,
     "contributor_id": "anon-2f183a",
     "created_at": "2026-09-23"
   },
@@ -517,6 +382,7 @@
     "harness": "Python requests",
     "verified": true,
     "status": "published",
+    "seed": true,
     "contributor_id": "anon-2f183a",
     "created_at": "2026-09-23"
   },
@@ -561,6 +427,7 @@
     "harness": "Python requests",
     "verified": true,
     "status": "published",
+    "seed": true,
     "contributor_id": "anon-2f183a",
     "created_at": "2026-09-23"
   },
@@ -605,6 +472,7 @@
     "harness": "Python requests",
     "verified": true,
     "status": "published",
+    "seed": true,
     "contributor_id": "anon-2f183a",
     "created_at": "2026-09-23"
   }

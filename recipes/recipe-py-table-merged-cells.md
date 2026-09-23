@@ -38,6 +38,7 @@ retrospective: 表格的『列』不等于『每行 td 数』——合并单元�
 harness: Python requests
 verified: true
 status: published
+seed: true
 contributor_id: anon-2f183a
 created_at: '2026-09-23'
 ---

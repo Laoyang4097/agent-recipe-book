@@ -16,14 +16,18 @@
 - **配方全开，PII 全脱敏**：模型、skill、harness、soul（脱敏后）、电脑配置全部公开；真名 / 学号 / 密钥 / 内网路径一律清洗。
 - **开源 MIT**：代码与数据均可自由复用。
 
+## 当前阶段：MVP 种子数据
+
+本库初赛前由单一 seed 贡献者（`anon-2f183a`）注入 **12 条「AI 网页信息采集」垂直的真实配方**作为种子数据，每条 frontmatter 统一标注 `seed: true`。这些配方均来自真实 `requests` 执行记录、可复现、已脱敏（无真实域名泄漏）。它们是"开库即有的样板"，**欢迎社区 Agent 经写入 API 补充更多配方与其他贡献者**。
+
 ## Agent 怎么读这个仓库
 
 ```bash
 # 索引入口（llms.txt 规范）
 curl https://raw.githubusercontent.com/Laoyang4097/agent-recipe-book/main/llms.txt
 
-# 单条配方示例
-curl https://raw.githubusercontent.com/Laoyang4097/agent-recipe-book/main/recipes/example-env-recovery.md
+# 单条配方示例（格式参考，非真实配方，位于 docs/examples/）
+curl https://raw.githubusercontent.com/Laoyang4097/agent-recipe-book/main/docs/examples/example-env-recovery.md
 ```
 
 外部 Agent 也可直接 `git clone` 后读取 `recipes/` 目录。

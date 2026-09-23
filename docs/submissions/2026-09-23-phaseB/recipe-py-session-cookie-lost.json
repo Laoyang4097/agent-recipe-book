@@ -1,7 +1,10 @@
 {
   "id": "recipe-py-session-cookie-lost",
   "title": "requests.get 之间 cookie 静默丢失：Set-Cookie 挂在 302 跳上、r.cookies 却是空的，只有 Session 才真正保留",
-  "tags": ["session", "scrape"],
+  "tags": [
+    "session",
+    "scrape"
+  ],
   "model": "Agent+Python requests",
   "problem": "抓某公开 HTTP 测试服务时，先请求一个『设置 cookie 并 302 跳到回显页』的标准回显端点(路径如 /cookies/set)，再用 requests.get 单独请求回显端点(/cookies)想读回 cookie，结果拿到空对象 {'cookies': {}}。直觉以为『requests 会自动保存并带上 cookie』，实际每一次 requests.get 都是彼此独立的一次会话，cookie 不会跨调用保留；更阴的是，想拿第一次响应的 r1.cookies 手动搬运，r1.cookies 也是空的。",
   "dead_ends": [
@@ -29,5 +32,6 @@
   "harness": "Python requests",
   "result": "实测同一公开测试服务：直觉两次独立 get -> 第二次 {'cookies': {}}（丢失）；改用 Session -> {'cookies': {'sid': 'abc123'}}（保留）；手动 cookies=r1.cookies -> 仍 {}（因 r1.cookies 为空，Set-Cookie 在 r1.history[0] 的 302 上，history=[(302, {'sid':'abc123'})]）；手动汇总 history 再搬运 -> 才成功。",
   "retrospective": "三条忠告：a) requests.get 不等于浏览器，cookie 不跨调用；要状态就用 Session。b) 看 Set-Cookie 时要意识到它可能落在重定向链的中间响应上，最终响应的 .cookies 未必有你想要的。c) 能交给库管理的状态（cookie jar、连接池、默认头）就不要手工搬运，手工方案在真实站点上必然漏项。",
-  "verified": true
+  "verified": true,
+  "seed": true
 }

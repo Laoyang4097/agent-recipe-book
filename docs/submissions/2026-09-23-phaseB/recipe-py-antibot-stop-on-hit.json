@@ -1,7 +1,11 @@
 {
   "id": "recipe-py-antibot-stop-on-hit",
   "title": "反爬遇即停：requests 默认 UA 撞 403+JS/DataDome 挑战与 Cloudflare 403，命中即弃、零绕过",
-  "tags": ["anti-bot", "scrape", "headless"],
+  "tags": [
+    "anti-bot",
+    "scrape",
+    "headless"
+  ],
   "model": "Agent+Python requests",
   "problem": "用 requests 抓两个公开反爬站（某 SaaS 评测站、某招聘点评站），默认 python-requests UA 单次请求即被拦截：一个返回 403 + JS/DataDome 挑战骨架，一个返回 403 纯文本 Forbidden。此时最大误区是『换个 UA / 加代理 / 上打码』继续硬推——正确做法是识别反爬信号后立即停止该目标，把它记为不可抓取的 dead_end，而不是尝试绕过。",
   "dead_ends": [
@@ -23,5 +27,6 @@
   "harness": "Python requests",
   "result": "实测：某评测站 默认UA 403/1704B/cloudflare，body 含 'Please enable JS and disable any ad blocker' 与 DataDome var dd={'rt':'c',...}；某点评站 默认UA 403/9B/text-plain 'Forbidden'。二者均单次请求命中即停，全程 0 次重试、0 代理、0 验证码尝试。",
   "retrospective": "反爬不是『技术难题』而是『合规边界』：requests 能拿到挑战页本身就说明被识别了，继续加 UA/代理只是把简单拒绝升级为封 IP。真正可复用的是『识别→记录→停止』这条流水线，以及把 403 与 200 挑战骨架区分开的判定函数；能拿到的站直接抓，拿不到的如实记录并转交，不硬碰。",
-  "verified": true
+  "verified": true,
+  "seed": true
 }

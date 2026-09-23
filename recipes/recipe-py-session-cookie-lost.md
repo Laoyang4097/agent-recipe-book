@@ -42,6 +42,7 @@ retrospective: 三条忠告：a) requests.get 不等于浏览器，cookie 不跨
 harness: Python requests
 verified: true
 status: published
+seed: true
 contributor_id: anon-2f183a
 created_at: '2026-09-23'
 ---

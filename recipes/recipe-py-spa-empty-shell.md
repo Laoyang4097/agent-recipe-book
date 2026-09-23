@@ -34,6 +34,7 @@ retrospective: 200 且体积大 ≠ 有内容。对 SPA 要先做『空壳体检
 harness: Python requests
 verified: true
 status: published
+seed: true
 contributor_id: anon-2f183a
 created_at: '2026-09-23'
 ---
