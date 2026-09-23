@@ -24,11 +24,20 @@ dead_ends:
   failure: FileNotFoundError：脚本按变更清单逐个读取本地文件，而被移动/删除的旧路径在本地已不存在，直接抛异常、推送中断
   duration: 5min
   early_signal: git diff-tree --name-only 给出的是「变更清单」而不是「现存文件清单」——被删除的路径也会出现在里面，读文件前必须先判断存在性
+- attempt: 绕开 API 脚本，直接用 git push 把本地提交推上去（想一劳永逸）
+  failure: 被拒：[rejected] main -> main (fetch first)。真因不是网络也不是权限，而是此前走 API 推送时远端被写入了「内容相同、SHA
+    不同」的影子提交，两条提交图谱就此分叉 —— 本地提交的父提交在远端不存在
+  duration: 10min
+  early_signal: 看到过 ahead N 假象时就该顺手核对图谱是否真的一致；等到 push 被拒才发现，说明当初把「内容同步」误当成了「图谱同步」
 solution: '① 用「内容比对」而非「引用计数」判断同步：逐文件对比本地内容与远端 API 返回内容，或对比 tree SHA；② diff 基准改用本地
   HEAD~1 等本地存在的提交；③ 推送脚本对每个变更路径先判断本地是否存在：存在则上传 blob，不存在则在 tree 中以 "sha": null 表示删除；④
-  网络恢复后在正常网络执行一次 git fetch && git reset --hard origin/main 把指针对齐。'
+  网络恢复后在正常网络执行一次 git fetch && git reset --hard origin/main 把指针对齐。⑤ 已分叉时的最小修法：先 git
+  diff --stat FETCH_HEAD main 确认「差异恰好等于本次改动」（即内容零丢失），再 git rebase --onto FETCH_HEAD
+  <分叉前的本地 tip> main 把本地提交重放到远端之上，然后正常 git push；最后 git update-ref refs/remotes/origin/main
+  $(git rev-parse main) 修正本地跟踪引用，ahead 计数随即归零。'
 result: 内容层面确认本地与远端零差异（本地有远端无 = 无、远端有本地无 = 无）；推送脚本改为运行时动态获取远端 SHA 作父提交、并按存在性区分「上传」与「删除」，含文件移动的提交也能一次推成功。
 retrospective: git 的本地引用是缓存而非真相。绕过 git 推送时本地状态会失真 —— 判断同步与否要看内容，不要看计数器。同理，git 输出的「变更清单」是变更视角、不是现状视角：含删除/移动时，必须按存在性分支处理，否则脚本会在最不该崩的地方崩（推送中途）。
+  另：分叉丢的不是内容而是「可推送性」—— 确认内容一致后用 rebase 重放，比 force push 安全（不会覆盖远端独有提交），也比重建仓库省事。
 harness: WorkBuddy
 hardware:
   os: Windows 10 22H2
