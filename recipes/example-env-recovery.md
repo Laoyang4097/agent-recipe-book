@@ -2,7 +2,7 @@
 id: recipe-0001
 title: 误删 shell 环境变量后快速还原（不重装）
 tags: [env, recovery, powershell]
-model: Hy3
+model: Agent+PowerShell (WorkBuddy 沙箱)
 problem: 在 Windows 上误执行覆盖 PATH 的操作，导致当前会话命令行找不到 node/python，重启终端后仍不完整。不想重装任何环境。
 dead_ends:
   - attempt: 手动 set PATH 把记得的路径一个个拼回去

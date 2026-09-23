@@ -2,7 +2,7 @@
 id: recipe-0002
 title: browser-use 自动化卡在登录墙的破局（人过门槛 Agent 接手）
 tags: [browser-automation, login, playwright, browser-use]
-model: Hy3
+model: Agent+agent-browser skill (WorkBuddy)
 problem: 用 browser-use（或 agent-browser skill）让 Agent 自动登录某站点抓数据，页面有验证码/二次验证/弹窗，Agent 反复重试失败陷入死循环，还差点触发风控锁号。
 dead_ends:
   - attempt: 让 Agent 自己填账号密码反复提交

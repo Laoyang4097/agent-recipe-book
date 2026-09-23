@@ -1,0 +1,51 @@
+---
+id: recipe-py-table-merged-cells
+title: requests 解析含 rowspan/colspan 的表格：每行单元格数参差 [3,4,5,...]，列直接错位
+tags:
+- scrape
+- selector
+model: Agent+Python requests
+problem: 抓含合并单元格的公开表格后，按『每个 <tr> 的 <td> 数=列数』直接取数会错位：多行表头 + rowspan/colspan 让各行单元格数不一致，且部分表的
+  tbody 为空（数据靠 JS 填充），照常解析只能拿到表头。
+dead_ends:
+- attempt: 把每个 <tr> 的 <td>/<th> 数当作列数、逐行读取
+  failure: 某统计机构公报数据表 221 行，逐行单元格数为 [3,4,5,5,5,...] 参差不齐（首行 3 个、其余 5 个），表头 colspan
+    合并列后与数据列对不上；某彩票开奖表两行表头逐行 [8,4]，与展开后的 10 列完全错位
+  duration: 单页抓取约 27s（1.43MB），解析秒级
+  early_signal: naive_widths 集合大小 >1（ragged=True），列数与展开宽度（5 / 10）不符
+- attempt: 把第一行当表头、其余行当数据
+  failure: 遇到双行表头（如 '指标 | 12月 | 1-12月' 下再一行 '绝对量 | 同比增长（%）'）时，第二行表头被当成第一条数据；且展开后表头行与数据行列数不同
+  duration: 秒级
+  early_signal: 展开后 grid[:2] 两行都像表头（'指标'/'绝对量'/'同比增长'），数据从第 3 行才开始
+- attempt: 直接解析某彩票开奖公告的表体取开奖数据
+  failure: 表头解析正常（rowspan×6 + colspan×2 展开成 10 列），但 <tbody></tbody> 为空——0 行数据，开奖号码根本不在静态
+    HTML 里（AJAX/JS 填充）
+  duration: 单页 62,622 字节，秒级
+  early_signal: n_rows=2（仅表头），tbody 内 0 数据行，展开网格只有 2 行表头
+- attempt: 忽略编码直接取中文单元格文本
+  failure: 两站响应头编码均被判为 ISO-8859-1，直接取值是乱码（'期号' → 'æå·'）；实际应为 utf-8
+  duration: 秒级
+  early_signal: r.encoding='ISO-8859-1' 而页面实际为 utf-8
+solution: 可跑要点：① 不要用『每行 td 数』当列数；先按 rowspan/colspan 展开成规整网格（维护 pending rowspan 占位，逐行填充被上方合并占用的列）。②
+  表头可能多行，取前 1–2 行做表头并合并（如 colspan 的父列名 + 子列名拼成 '一等奖-注数'）。③ 显式修正编码（默认 ISO-8859-1 时用
+  apparent_encoding / 站点 charset，实测应设为 utf-8）。④ 解析前先查 tbody 是否有数据行；若为空说明数据靠 JS，应改找
+  XHR/API。⑤ 用解析器（html.parser / lxml）而非正则切表。
+result: 某统计机构公报（1.43MB）含 4 表：数据表 221 行、逐行单元格数 [3,4,5,5...] 参差、colspan 3 处 + rowspan
+  1 处、空单元格 60 个、展开宽度 5，双行表头。某彩票开奖公告表表头 rowspan×6 + colspan×2 展开 10 列，但 tbody 为空、0
+  行数据。两站响应头编码均误报 ISO-8859-1（实为 utf-8）。
+retrospective: 表格的『列』不等于『每行 td 数』——合并单元格必须先展开网格再对齐。另外要先确认 tbody 到底有没有数据：静态表头 + 空 tbody
+  说明数据是后端接口给的，继续抠 HTML 是死路。
+harness: Python requests
+verified: true
+status: published
+contributor_id: anon-2f183a
+created_at: '2026-09-23'
+---
+
+## 背景与卡点
+
+抓含合并单元格的公开表格后，按『每个 <tr> 的 <td> 数=列数』直接取数会错位：多行表头 + rowspan/colspan 让各行单元格数不一致，且部分表的 tbody 为空（数据靠 JS 填充），照常解析只能拿到表头。
+
+## 死胡同详解 / 解法步骤 / 复盘
+
+详见 frontmatter 结构化字段；此处供人深读。

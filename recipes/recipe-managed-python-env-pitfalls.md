@@ -8,7 +8,7 @@ tags:
 - workbuddy
 - yaml
 - ci-cd
-model: Hy3
+model: Agent+managed Python 3.13.12 (WorkBuddy 沙箱)
 problem: 要在 WorkBuddy 沙箱里跑一个 Python 脚本（项目里的 api/ingest.py，需要 pyyaml 解析 frontmatter），并把改动提交推到
   GitHub。结果连踩几个环境坑：脚本跑不起来、commit 被拒、路径解析错位、JSON 序列化崩。
 dead_ends:

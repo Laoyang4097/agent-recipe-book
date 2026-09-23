@@ -8,7 +8,7 @@
       "playwright",
       "browser-use"
     ],
-    "model": "Hy3",
+    "model": "Agent+agent-browser skill (WorkBuddy)",
     "problem": "用 browser-use（或 agent-browser skill）让 Agent 自动登录某站点抓数据，页面有验证码/二次验证/弹窗，Agent 反复重试失败陷入死循环，还差点触发风控锁号。",
     "dead_ends": [
       {
@@ -51,7 +51,7 @@
       "recovery",
       "powershell"
     ],
-    "model": "Hy3",
+    "model": "Agent+PowerShell (WorkBuddy 沙箱)",
     "problem": "在 Windows 上误执行覆盖 PATH 的操作，导致当前会话命令行找不到 node/python，重启终端后仍不完整。不想重装任何环境。",
     "dead_ends": [
       {
@@ -87,109 +87,6 @@
     "created_at": "2026-09-23"
   },
   {
-    "id": "recipe-anti-bot-encounter-stop",
-    "title": "采集某房产信息站遇 Access denied 人机验证，立即停手不绕过",
-    "tags": [
-      "anti-bot",
-      "scrape"
-    ],
-    "model": "Hy3",
-    "problem": "需用 WebFetch 采集一个以反爬著称的公开站点作为练习，预期可能遇到 403/验证码/挑战页；合规要求一旦遇到反爬拦截必须立即停，不得硬破解或绕验证码、不得换 UA 对抗。",
-    "dead_ends": [
-      {
-        "attempt": "直接 WebFetch 该房产信息站首页（某房产信息站），期望拿到公开房源列表内容。",
-        "failure": "返回明确反爬拦截页：标题 'Access to this page has been denied'，正文 'Press & Hold to confirm you are a human (and not a bot)'，并附 Reference ID。",
-        "duration": "约 1 次请求（数秒）。",
-        "early_signal": "页面标题即写明 'Access to this page has been denied' 且要求人机确认 → 是 bot 检测挑战，不是 404 也不是限流，应立即停。"
-      },
-      {
-        "attempt": "为确认是否仅首页被拦，再 WebFetch 该站子路径（某房产信息站/homes/）一次以观察拦截范围。",
-        "failure": "子路径同样返回 'Access to this page has been denied' + 人机确认提示（新 Reference ID），说明是站级 bot 防护。",
-        "duration": "约 1 次请求（数秒）。",
-        "early_signal": "两处路径均被同一挑战拦截 → 站级防护，单点重试/换路径无意义；依据合规红线停止该采集任务。"
-      }
-    ],
-    "solution": "1) 见到 'Access denied / confirm you are a human / CAPTCHA / Just a moment' 等任一反爬信号，立刻停止对目标的所有后续请求，绝不尝试换 UA、破解或绕验证码。2) 将该站标记为'反爬/需人工验证'，域名匿名化（某房产信息站）后归档为 dead_end。3) 若业务必须数据，改走官方 API、授权数据源或征得许可的合规渠道，而非对抗式爬取。4) 用控制站点（example.com）验证采集通道本身正常，排除'误把反爬当成工具故障'。",
-    "result": "确认该站启用站级人机验证反爬，按红线零绕过、零重试对抗，任务安全终止；未获取任何站内数据，符合合规要求。",
-    "retrospective": "反爬即停不是'失败'，而是正确的合规终止。把'遇到反爬'本身当作一条有价值的死胡同记录，比硬刚更有用，也避免触碰法律与伦理红线。",
-    "harness": "WebFetch；返回为人机验证挑战页而非 403 状态码，需靠页面文案判定。",
-    "agent_config": "model=Hy3; 只读首页 + 一次子路径确认; 遇挑战即停，无后续对抗请求。",
-    "verified": true,
-    "status": "published",
-    "contributor_id": "anon-2f183a",
-    "created_at": "2026-09-23"
-  },
-  {
-    "id": "recipe-backoff-throttle-reachable-host",
-    "title": "诊断出代理拦截后，切到可达宿主并对连续请求做退避限速，全部成功且无限流",
-    "tags": [
-      "scrape",
-      "rate-limit",
-      "timing"
-    ],
-    "model": "Hy3",
-    "problem": "需要真实做'连续高频采集'以验证是否会触发限流，但直觉的'同一批并行 20 次'既可能触发目标风控，又无法干净地观察顺序限流信号，且分不清成功来自低量还是命中工具缓存。",
-    "dead_ends": [
-      {
-        "attempt": "为最大化速度，把约 20 次 WebFetch 放在同一批次并行发出，期望快速拿到限流与否的结论。",
-        "failure": "并行批次返回结果难以区分是单点失败还是限流；且对单域瞬时高并发最易触发风控，限流信号被并发噪声掩盖。",
-        "duration": "约 10 秒。",
-        "early_signal": "并发下得不到'第 N 次开始 429'的时序证据，限流观察失败。"
-      },
-      {
-        "attempt": "假设无需间隔，连续请求不加分毫延迟，直接断言'该站无限流'。",
-        "failure": "无法区分成功来自'请求量低未被限流'还是'命中工具缓存'（WebFetch 有 15 分钟缓存），观测结论不可信。",
-        "duration": "约 15 秒。",
-        "early_signal": "多次返回内容完全一致 → 极可能是缓存命中而非真实源站响应，不能据此判断'无限流'。"
-      }
-    ],
-    "solution": "1) 先做控制站点探活（example.com）确认采集通道正常。2) 选可达宿主，将并发降为 1，按'起始间隔 1s，遇非 200/429 则翻倍退避、上限 30s'的节奏顺序发出。3) 每次检查响应是否含 429/Retry-After；出现则尊重并在 Retry-After 后重试，否则继续。4) 为排除工具缓存干扰，给 URL 加单调变化参数（如 ?seq=1..N）对真实源站施压。5) 记录每轮状态码与耗时，得到可解释的时序曲线。",
-    "result": "切到可达宿主后，顺序退避发出多次请求（验证批次 example.com ×3 均返回 200），未触发任何限流，证明'先诊断根因 + 限速'可平稳绕开工具侧拦截并规避真实风控。",
-    "retrospective": "高频采集的坑不在'会不会被限流'，而在'失败到底是限流还是采集链拦截/缓存'。先定性（控制站点对比）再定量（顺序退避 + 单调参数），结论才可信。",
-    "harness": "WebFetch；利用 ?seq 参数规避 15 分钟缓存以产生真实源站请求。",
-    "agent_config": "model=Hy3; 顺序单并发; 退避 1s→翻倍→30s 上限; URL 带单调参数。",
-    "verified": true,
-    "status": "published",
-    "contributor_id": "anon-2f183a",
-    "created_at": "2026-09-23"
-  },
-  {
-    "id": "recipe-headless-vs-headed-spa-antibot",
-    "title": "无头抓取SPA首页：渲染壳+轮播窗口≠完整视图，且会被反爬指纹拦截",
-    "tags": [
-      "headless",
-      "anti-bot",
-      "scrape"
-    ],
-    "model": "Hy3",
-    "problem": "用无头/静态方式（WebFetch 语义≈无头静态请求）抓取一个 SPA 首页，期望拿到和用户浏览器一致的完整内容。实测两大类落差：① SPA 首页只暴露导航壳+轮播首屏窗口，核心搜索结果网格与登录墙内容缺失；② 部分站点对自动化客户端直接返回反爬 Proof-of-Work 挑战页，拿不到任何内容。",
-    "dead_ends": [
-      {
-        "attempt": "WebFetch 某短租平台首页，要求完整渲染并列出所有房源/价格",
-        "failure": "返回了导航、17 个体验分类、8 个热门体验 Listing（含价格），但页面自身标注 “10 of 17 / 7 of 8 items showing”——轮播只暴露窗口；核心的“住宅搜索结果网格”（首页主干）完全缺失，因为需先在搜索框输入地点触发；“登录领取优惠”登录墙内容不可见",
-        "duration": "1 次请求",
-        "early_signal": "返回的是预置的“体验/服务”轮播，而非用户真正要看的房源列表；多处 “X of Y showing” 说明内容被窗口化、主干需交互才出现"
-      },
-      {
-        "attempt": "WebFetch 某免费图库首页，期望拿到图片流",
-        "failure": "被 Anubis 反爬拦截，返回 “Making sure you're not a bot!” 的 Proof-of-Work 挑战页（Hashcash 式算力证明），要求现代 JS 特性，无任何图片内容",
-        "duration": "1 次请求",
-        "early_signal": "页面标题变成 anti-bot 挑战，正文是工作量证明说明——典型的无头/自动化客户端被指纹识别后拦截"
-      }
-    ],
-    "solution": "1) 判断目标是否 SPA/强反爬：看是否大量 “X of Y showing”、空白主干、或挑战页。2) 不依赖裸首页：直接调用站点底层 JSON API / 搜索接口（带 query 参数如 location、checkin），拿结构化数据而非渲染壳。3) 遭遇反爬挑战：不要硬算 PoW；改用官方 API key / 带浏览器化 UA 与必要 headers，或换数据源（RSS/export/开放 API）。4) 必须模拟有头时：用 headless 浏览器并注入真实 UA、viewport、WebGL/字体指纹，避免被 Anubis 类按字体渲染差异识别。5) 登录墙内容放弃抓取（合规），只取公开部分。",
-    "result": "实测：某短租 SPA 首页 WebFetch 拿到窗口化轮播但缺失房源主干与登录优惠；某图库被 Anubis PoW 拦截。两者都证伪了“无头静态请求≈有头完整视图”的假设。",
-    "retrospective": "直觉把无头请求当成“能 JS 渲染就等于人看到的全部”。其实 SPA 的主干内容常靠交互/搜索才出现，且反爬系统专门识别自动化客户端。无头采集要先判断渲染与反爬，再决定走 API 还是带指纹的浏览器。",
-    "skills": [],
-    "harness": "WebFetch",
-    "hardware": "云端执行环境",
-    "agent_config": "单次 WebFetch，提示要求完整渲染首页",
-    "verified": true,
-    "status": "published",
-    "contributor_id": "anon-2f183a",
-    "created_at": "2026-09-23"
-  },
-  {
     "id": "recipe-managed-python-env-pitfalls",
     "title": "在 WorkBuddy 托管 Python 环境跑依赖脚本的坑（缺包 / 丢 git 身份 / cwd 不持久 / YAML 日期序列化）",
     "tags": [
@@ -200,7 +97,7 @@
       "yaml",
       "ci-cd"
     ],
-    "model": "Hy3",
+    "model": "Agent+managed Python 3.13.12 (WorkBuddy 沙箱)",
     "problem": "要在 WorkBuddy 沙箱里跑一个 Python 脚本（项目里的 api/ingest.py，需要 pyyaml 解析 frontmatter），并把改动提交推到 GitHub。结果连踩几个环境坑：脚本跑不起来、commit 被拒、路径解析错位、JSON 序列化崩。",
     "dead_ends": [
       {
@@ -247,321 +144,465 @@
     "created_at": "2026-09-23"
   },
   {
-    "id": "recipe-rate-limit-proxy-misattribution",
-    "title": "高频采集公开站全报 fetch failed：误判限流，实为采集代理对部分域名静默拦截",
+    "id": "recipe-py-antibot-stop-on-hit",
+    "title": "反爬遇即停：requests 默认 UA 撞 403+JS/DataDome 挑战与 Cloudflare 403，命中即弃、零绕过",
     "tags": [
+      "anti-bot",
       "scrape",
-      "rate-limit"
+      "headless"
     ],
-    "model": "Hy3",
-    "problem": "想通过对同一公开站点（某技术百科站）连续发起约 20 次 WebFetch 来观察目标站频率限制/封禁信号，结果所有请求返回 'fetch failed'，没有 429、没有减速、没有任何 HTTP 状态码，无法判断到底是目标限流还是采集链路自身问题。",
+    "model": "Agent+Python requests",
+    "problem": "用 requests 抓两个公开反爬站（某 SaaS 评测站、某招聘点评站），默认 python-requests UA 单次请求即被拦截：一个返回 403 + JS/DataDome 挑战骨架，一个返回 403 纯文本 Forbidden。此时最大误区是『换个 UA / 加代理 / 上打码』继续硬推——正确做法是识别反爬信号后立即停止该目标，把它记为不可抓取的 dead_end，而不是尝试绕过。",
     "dead_ends": [
       {
-        "attempt": "对同一公开站点（某技术百科站）连续发起 5 次 WebFetch，并用 ?probe=1..5 变化查询参数模拟真实源站请求，期望触发 429/限流信号。",
-        "failure": "5 次全部返回 'Error during web fetch: fetch failed'，既无 HTTP 状态码也无任何限流提示，内容缺失。",
-        "duration": "约 20 秒（单批次并行 5 次）。",
-        "early_signal": "同环境下 example.com 可正常返回，而该站每次必失败 → 不是目标限流（限流会有 429/Retry-After/内容降级），而是采集侧拦截。"
+        "attempt": "requests 默认 UA 单次 GET 某 SaaS 评测站首页（https://<某评测站域名>/），allow_redirects=True、timeout=12，不做任何伪装",
+        "failure": "status=403，Server: cloudflare，Content-Type: text/html;charset=utf-8，仅 1704 字节，CF-RAY 存在；body_head 原文（站点域名已匿名化）：'<html lang=\"en\"><head><title>[某评测站域名]</title><style>#cmsg{animation: A 1.5s;}...' + '<p id=\"cmsg\">Please enable JS and disable any ad blocker</p><script data-cfasync=\"false\">var dd={'rt':'c','cid':'AHrlqAAAAAMAtUx...'（DataDome JS 挑战 + Cloudflare）",
+        "duration": "0.31s",
+        "early_signal": "status=403 且 body 含 'Please enable JS and disable any ad blocker'、challenge-platform、DataDome 的 var dd={'rt':'c',...}；命中后立即停止，未重试"
       },
       {
-        "attempt": "假设是瞬时网络抖动，单独重试该站首页（不带参数）若干次验证是否偶发。",
-        "failure": "重试仍稳定返回 'fetch failed'，错误文案完全一致、瞬时返回，没有任何一次间歇成功。",
-        "duration": "约 30 秒。",
-        "early_signal": "错误确定性强、无随机性 → 是确定性拦截（代理/域名 allowlist/TLS egress），不是偶发限流，加 sleep 重试无助于解决。"
+        "attempt": "requests 默认 UA 单次 GET 某招聘点评站首页（https://<某点评站域名>/），同样单次、无伪装",
+        "failure": "status=403，Server: cloudflare，Content-Type: text/plain，body 仅 9 字节：'Forbidden'（此为第一版探针命中过 cf-mitigated: challenge 的同一站，说明挑战/拒绝形态不稳定）",
+        "duration": "0.55s",
+        "early_signal": "status=403 + body 仅 9 字节 'Forbidden' + text/plain（连 HTML 挑战页都不给），命中后立即停止，未重试"
       }
     ],
-    "solution": "1) 在怀疑'限流'前，先对已知可达宿主（如 example.com）做控制请求；若控制成功但目标稳定失败，根因在采集代理/沙箱对该域名的 egress 拦截，而非目标限流。2) 用'控制站点对比法'区分：限流=有 429/Retry-After/内容降级；代理拦截=无状态码、错误瞬时且跨参数稳定。3) 只有确认是真限流才上退避；若是代理拦截应换可达宿主或检查 egress，盲目加 sleep 只会拖慢且无效。",
-    "result": "确认本次失败非目标限流，转用可达宿主继续采集；该站的高频限流信号因代理静默拦截而未能观察到。",
-    "retrospective": "直觉把'请求失败'直接等同于'被限流'，忽略了采集工具本身也会静默拦截部分域名。先控制变量（控制站点对比）再下结论，避免把代理故障误当限流去退避。",
-    "harness": "WebFetch（含 15 分钟自清理缓存）；同环境 example.com 可达，en.wikipedia.org / bbc.com 被静默 fetch failed。",
-    "agent_config": "model=Hy3; 并发 WebFetch; URL 变化参数(?probe=N)绕缓存以产生真实源站请求。",
+    "solution": "可复用步骤：① 抓取任何站点第一条请求就用 try/except 包住，并显式 timeout（如 timeout=(5, 12) 分开连/读超时）。② 命中判定不要只看 status：anti_bot = status in (403,444,429,503) or headers.get('cf-mitigated') or body 命中 ['just a moment','attention required','captcha','challenge-platform','verify you are human','please enable js','access denied']。③ 一旦判定命中：LOG（status/Server/CF-RAY/Content-Type/字节数/body_head 前 300 字符）后立即 return，禁止重试、禁止换 UA 硬推、禁止上代理/打码。④ 把该站点标记为『需登录态或 headless 浏览器』，交由人工决策，不自动绕过。⑤ 对多个候选站逐个单次探测即可，命中即弃，避免对同一站反复冲撞（既无效又无礼）。",
+    "result": "实测：某评测站 默认UA 403/1704B/cloudflare，body 含 'Please enable JS and disable any ad blocker' 与 DataDome var dd={'rt':'c',...}；某点评站 默认UA 403/9B/text-plain 'Forbidden'。二者均单次请求命中即停，全程 0 次重试、0 代理、0 验证码尝试。",
+    "retrospective": "反爬不是『技术难题』而是『合规边界』：requests 能拿到挑战页本身就说明被识别了，继续加 UA/代理只是把简单拒绝升级为封 IP。真正可复用的是『识别→记录→停止』这条流水线，以及把 403 与 200 挑战骨架区分开的判定函数；能拿到的站直接抓，拿不到的如实记录并转交，不硬碰。",
+    "harness": "Python requests",
     "verified": true,
     "status": "published",
     "contributor_id": "anon-2f183a",
     "created_at": "2026-09-23"
   },
   {
-    "id": "recipe-scrape-encoding-gbk-newsportal",
-    "title": "抓新闻门户首页标题：GBK编码被工具掩盖，HTML噪声与追踪链接污染列表",
+    "id": "recipe-py-content-encoding-double-decode",
+    "title": "Content-Encoding 静默解压：requests 已自动解 gzip/deflate，手动再解一次即崩；br 未装库则静默乱码",
+    "tags": [
+      "encoding",
+      "scrape"
+    ],
+    "model": "Agent+Python requests",
+    "problem": "抓某公开 HTTP 测试服务返回的压缩响应(标准回显端点，路径如 /gzip、/deflate、/brotli)时，看到响应头 Content-Encoding: gzip，直觉认为『body 是压缩的、得自己解压』，于是对 r.content 调 gzip.decompress()——结果直接抛异常。真相是 requests 在底层已经透明解压，r.content 拿到的就是明文；bro 更隐蔽：响应头声明 Content-Encoding: br，但环境未装 brotli/requests 无法解，r.content 是原始 br 字节、r.text 是乱码，却不报错。",
+    "dead_ends": [
+      {
+        "attempt": "看到 Content-Encoding: gzip 后，对 r.content 调 gzip.decompress(r.content) 手动解压",
+        "failure": "抛 BadGzipFile: Not a gzipped file (b'{\\n') —— 因为 requests 已自动解压，r.content 前 12 字节是明文 b'{\\n  \"gzipped'，根本不是 gzip 魔数",
+        "duration": "约 1.32s（一次请求）+ 调试 3min",
+        "early_signal": "响应头 Content-Encoding 显示 gzip，但 r.content[:12] 是可见明文 b'{\\n  \"gzipped'（不是 0x1f8b 魔数），r.json() 又能直接解析成功"
+      },
+      {
+        "attempt": "对 Content-Encoding: deflate 的响应调 zlib.decompress(r2.content)",
+        "failure": "抛 zlib.error: Error -3 while decompressing data: incorrect header check —— 同样是重复解压，requests 已把 deflate 解掉了",
+        "duration": "约 1.37s（一次请求）",
+        "early_signal": "Content-Encoding=deflate 但 r2.json()['deflated'] 能直接取到，说明内容已是明文"
+      },
+      {
+        "attempt": "发请求时带 Accept-Encoding: br，抓 Content-Encoding: br 的响应，直接取 r.text / r.json()",
+        "failure": "环境未装 brotli，requests 无法解 br：r.content 是 194 字节原始 br 流(前 8 字节 hex=1b1a01009c07b673)，r.text[:60] 是一串 \\x1b\\x1a\\x01\\x00 乱码，r.json() 抛 JSONDecodeError: Expecting value: line 1 column 1 (char 0)。全程没有任何告警，静默产出坏数据",
+        "duration": "约 1.34s（一次请求），定位耗时 5min",
+        "early_signal": "Content-Encoding=br 但响应体不是可读文本；检查 content 头几字节是 1b 1a 开头（br 魔数），而非 { [ < 等明文"
+      },
+      {
+        "attempt": "想强制关闭压缩：请求加 Accept-Encoding: identity，期望服务端回未压缩 body",
+        "failure": "服务端无视该头，仍返回 Content-Encoding: gzip、len=290——证明不能指望用 identity 让服务端别压，压缩控制权在服务端",
+        "duration": "约 1.3s",
+        "early_signal": "请求写了 identity，响应头却仍是 gzip"
+      }
+    ],
+    "solution": "可跑要点：① 默认别手动解压——requests 会自动处理 gzip/deflate，r.content 已是明文，r.json()/r.text 直接用。② 判断是否已解压：看 r.content 开头是不是明文(如 '{'、'<' 而非 0x1f8b/0x1b)，或直接试 r.json()。③ 要用 br 必须先 `pip install brotli`（或 brotlicffi），否则 requests 静默给出原始 br 字节。④ 不要指望 Accept-Encoding: identity 能关掉服务端压缩。⑤ 落库前加哨兵：若 content 里出现 0x1b 1a 等压缩魔数或大比例非文本字节，判定『未解码』并报警，别把乱码当数据。⑥ 若需自行解压（极端场景），先按响应头 Content-Encoding 判断，且只在 r.content 未解压时才解。",
+    "result": "实测某公开测试服务：/gzip 响应 ce=gzip、len(content)=295、content[:12]=b'{\\n  \"gzipped'，手动 gzip.decompress 抛 BadGzipFile；/deflate 手动 zlib.decompress 抛 error -3；Accept-Encoding: br 抓 /brotli（ce=br、len=194、hex[:8]=1b1a01009c07b673），未装 brotli 时 r.text 为乱码、r.json() 抛 JSONDecodeError；Accept-Encoding: identity 被服务端无视，仍回 ce=gzip。",
+    "retrospective": "『看到 Content-Encoding 就手动解』是把库的自动行为当成没做——requests 早已透明解压，手动再解只会崩或产出坏数据。反过来 br 这种需要额外库的编码，缺失时它又静默不报错，所以真正稳妥的是『先用 r.json()/r.text 试，异常或魔数不对再排查编码』，并给未解码产出入库加哨兵。",
+    "harness": "Python requests",
+    "verified": true,
+    "status": "published",
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-23"
+  },
+  {
+    "id": "recipe-py-encoding-mojibake",
+    "title": "requests 抓中文站默认 r.encoding=ISO-8859-1 致乱码，用 apparent_encoding/content.decode 修复",
+    "tags": [
+      "encoding",
+      "scrape"
+    ],
+    "model": "Agent+Python requests",
+    "problem": "用 requests 抓某政务站首页，r.text 取回的中文全是 'ä¸æ¿åºç½' 一类乱码；而 r.encoding 默认给出 ISO-8859-1，页面实际是 UTF-8。坑点：当响应头 Content-Type 只有 'text/html'、不带 charset 时，requests 按 RFC 回退 ISO-8859-1，r.text 就静默乱码，不报任何异常。",
+    "dead_ends": [
+      {
+        "attempt": "拿到响应后直接读 r.text 取标题/正文",
+        "failure": "标题读成 'ä¸æ¿åºç½_ä¸å¤®äººæ°æ¿åºé¨æ·ç½ç«'（UTF-8 字节被当 ISO-8859-1 解码的典型 mojibake），同一站正文任意中文片段均无 CJK 命中，整个『中文』报废",
+        "duration": "1 次抓取 60.2s（实测 r.elapsed=60.2s，该站响应慢）",
+        "early_signal": "r.encoding 打印为 ISO-8859-1，Content-Type 仅 'text/html' 无 charset；r.apparent_encoding 却是 utf-8"
+      },
+      {
+        "attempt": "按『中文站就是 GBK』的经验，用 r.content.decode('gbk') 硬解",
+        "failure": "直接抛 UnicodeDecodeError: 'gbk' codec can't decode byte 0xad in position 359: illegal multibyte sequence；换 gb2312 同样报 0xad@359；gb18030 改报 byte 0x9d in position 4556；ascii 报 0xe4@357 —— 一律解码失败",
+        "duration": "1 次抓取 + 4 种编码各试 1 次",
+        "early_signal": "decode 抛 UnicodeDecodeError（而不是返回乱码），说明『中文站=GBK』的假设对该站不成立"
+      },
+      {
+        "attempt": "怕崩，用 r.content.decode('latin-1') 兜底强制解码",
+        "failure": "确实不抛异常，但产物里 [\\u4e00-\\u9fff]{4,} 命中 0 条、全无中文（静默产出错误数据，比报错更危险）",
+        "duration": "秒级",
+        "early_signal": "无异常但正文中文为空，只有高位符号乱码"
+      }
+    ],
+    "solution": "别信 r.encoding。可跑要点：① 先看响应头是否带 charset；无 charset 时 requests 会回退 ISO-8859-1。② 首选 `r.encoding = r.apparent_encoding or 'utf-8'` 再取 r.text；或直接 `r.content.decode('utf-8')`。③ 更稳用 requests 自带依赖 charset_normalizer：`from charset_normalizer import from_bytes; enc = from_bytes(r.content).best().encoding`（本例实测检测为 utf_8）。④ 兜底 `r.content.decode(enc, errors='replace')` 防单个坏字节炸掉整页。⑤ 读 HTML 里 <meta charset> 作为辅助校验。",
+    "result": "对某政务站实测：r.text 得到乱码标题 'ä¸æ¿åºç½_ä¸å¤®äººæ°æ¿åºé¨æ·ç½ç«'；设 r.encoding=r.apparent_encoding(utf-8) 后，标题恢复为 '中国政府网_中央人民政府门户网站'，3/3 中文片段正常；r.content.decode('utf-8') 结果一致；charset_normalizer 判定 utf_8。",
+    "retrospective": "三条忠告：a) 永远别用默认 r.text，改 r.content.decode(已知编码) 或先修 r.encoding；b) 别用『中文站=GBK』的经验硬套，先看 header/meta；c) 用 errors='replace' 兜底，避免一个坏字节让整批数据全灭。另注：本环境该站响应可慢至 60s，timeout 参数并不等于总耗时上限，长任务要放后台跑。",
+    "harness": "Python requests",
+    "verified": true,
+    "status": "published",
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-23"
+  },
+  {
+    "id": "recipe-py-html-entities-not-decoded",
+    "title": "提取文本忘 unescape：&#39;/&amp;/&rarr; 原样入库，手写 replace 链还会因顺序二次解码",
+    "tags": [
+      "selector",
+      "encoding"
+    ],
+    "model": "Agent+Python requests",
+    "problem": "抓某公开引用练习站做结构化抽取时，用正则/HTMLParser 取到标签之间的文本后直接入库，结果字段里带着 HTML 实体：同一页出现 &#39; 共 4 次、&rarr; 1 次，正文里的撇号、箭头都以实体形式存进了 JSON。如果为了『省事』手写 replace 链清洗，顺序写错还会把 &amp;lt; 二次解码成 '<'，把数据改坏。",
+    "dead_ends": [
+      {
+        "attempt": "用正则 >([^<>]{3,80})< 直接从响应文本里抠标签间内容，抠到即写库",
+        "failure": "抠出的片段原样带着实体：'“I have not failed. I&#39;ve just found 10,000 ways that won&#39;t work.”'，其中 &#39; ×4、&rarr;(→) ×1 未解码，字段里出现反人类的 &...; 记号",
+        "duration": "约 0.9s（一次请求）+ 抽取调试 4min",
+        "early_signal": "抽出的值里含有 '&' 开头的实体序列（&#39;、&rarr; 等），且中文/符号显示为编码而非字符本身"
+      },
+      {
+        "attempt": "只用 HTMLParser 收集文本节点、剥离 script/style，以为『去掉标签就干净了』",
+        "failure": "标签是去掉了，但实体不是标签，HTMLParser 默认不对数据做实体解码，&#39;、&rarr; 依然原样留在可见文本里",
+        "duration": "约 3min 改解析器",
+        "early_signal": "可见文本里仍出现 &xxx; 序列，说明问题不在标签而在实体"
+      },
+      {
+        "attempt": "手写 replace 链清洗，按『先换 &amp; 再换 &lt;』顺序：s.replace('&amp;','&').replace('&lt;','<')",
+        "failure": "对 '&amp;lt;b&amp;gt;' 这类『被转义的转义』会二次解码成 '<b&gt;'（把本应显示的 '&lt;b&gt;' 变成了真标签），数据被改坏且不可逆；顺序反过来才对",
+        "duration": "约 2min 试错",
+        "early_signal": "同一段文本替换前后语义变了（本该显示的字面量变成了标签/特殊字符），且顺序不同结果不同"
+      }
+    ],
+    "solution": "可跑要点：① 取到文本后统一用标准库 html.unescape(text) 解码实体（&#39; -> '、&rarr; -> →、&amp; -> &），它一次处理命名/十进制/十六进制实体。② 绝不要手写 replace 链清洗实体——顺序敏感，&amp; 必须先于其它处理，否则会把『转义过的转义』二次解码破坏数据。③ 顺序应为：先按选择器/解析器取到文本节点 -> html.unescape() -> 再做 trim/去空白等规整。④ 入库前加校验：值里若仍含 /&[#a-zA-Z0-9]+;/ 模式即判为未解码并修正。⑤ 注意 unescape 之后再 strip 标签是危险的（会把解出来的 '<' 当标签），所以务必先剥标签再 unescape。",
+    "result": "实测某公开引用练习站：正则抽取的正文片段原样含 &#39;×4、&rarr;×1；html.unescape 后还原为 '“I have not failed. I've just found 10,000 ways that won't work.”'；对照手写替换：对 '&amp;lt;b&amp;gt;'，正确 html.unescape 得 '&lt;b&gt;'，而 naive 先换 &amp; 得 '<b&gt;'（二次解码，错误）。",
+    "retrospective": "实体不是脏字符而是数据的一部分，忘 unescape 会把 ' 存成 &#39;、把 → 存成 &rarr;，下游 JSON 看着非空却全是编过码的假值。最常见的翻车不是『忘了清洗』，而是『手写清洗把顺序写反』——所以清洗实体只认标准库 html.unescape，别自己造轮子。",
+    "harness": "Python requests",
+    "verified": true,
+    "status": "published",
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-23"
+  },
+  {
+    "id": "recipe-py-http-redirect-timeout-tls",
+    "title": "requests HTTP 层真实现象：重定向拿空 body、连/读超时区分、gzip 自动解压、SSLError 与连接复用探针失效",
     "tags": [
       "scrape",
-      "encoding",
+      "timing",
+      "session"
+    ],
+    "model": "Agent+Python requests",
+    "problem": "requests 把很多 HTTP 细节藏了起来，导致对『重定向/超时/压缩/TLS/连接复用』的行为判断出错：以为不跟随重定向能拿到内容（实际拿到 0 字节）、以为超时只有一种（实际连超时与读超时是两回事）、以为 Connection 头能证明连接复用（实测取不到）。",
+    "dead_ends": [
+      {
+        "attempt": "对一个 2 跳重定向 URL 用 allow_redirects=False 抓取后，直接读 r.text 当正文使用",
+        "failure": "follow_false 返回 status=302、Location='/relative-redirect/1'、body_len=0（空 body），拿不到任何内容；同一 URL 用 allow_redirects=True 则自动跟完 2 跳：history=[(302,'/relative-redirect/1'),(302,'/get')]，最终 status=200、final_url=https://<镜像站>/get",
+        "duration": "follow_true/follow_false 均秒级",
+        "early_signal": "302 + Location 头 + body 长度 0；history 长度=2"
+      },
+      {
+        "attempt": "想用 resp.raw 取底层 socket 的本地端口，来证明 requests.Session 复用了同一 TCP 连接",
+        "failure": "两条取值路径 resp.raw._connection.sock 和 resp.raw._fp.fp.raw._sock 均抛异常被吞，session_ports=[null,null,null]、fresh_ports=[null,null,null]，Connection 响应头也是 null。该方式在新版 urllib3 下拿不到连接信息，连接复用『无法用这个方法观测』——不是没复用，而是探针失效",
+        "duration": "3+3 次请求，秒级",
+        "early_signal": "local_port 全部为 None（取值路径全部失败）"
+      },
+      {
+        "attempt": "期望用镜像站的 /brotli 端点验证 requests 对 brotli 压缩的自动解码，并显式发 Accept-Encoding: br 试探",
+        "failure": "/brotli 返回 501 Not Implemented（body '{\"status_code\": 501, \"error\": \"Not Implemented\"}'，55 字节），该镜像未实现此端点；显式 Accept-Encoding: br 请求 /get 直接 ReadTimeout（read timeout=10）。brotli 解码依赖本机安装 brotli 包且服务端支持，不能想当然以为和 gzip 一样自动可用",
+        "duration": "501 秒级；Accept-Encoding: br 请求约 10s 超时",
+        "early_signal": "status=501 + body 含 'Not Implemented'；Accept-Encoding: br 触发 ReadTimeout"
+      }
+    ],
+    "solution": "可复用步骤：① 重定向：需要正文就用 allow_redirects=True（默认），并检查 len(r.history) 与 r.url 确认最终落点；需要拿 3xx 的 Location 做分析才用 False，且此时 body 常为 0 字节，不要拿去解析。② 超时：用元组区分连/读超时 timeout=(connect, read)（如 (5, 12)）；ConnectTimeout 表示连接阶段就失败（对端不可达/被墙/端口关），ReadTimeout 表示已连上但服务端迟迟不返回，二者排障方向不同。③ 压缩：requests 默认 Accept-Encoding: gzip, deflate 并自动解压，r.content 是解压后内容（实测 gzip 响应 Content-Length=413 而 len(r.content)=771）；要 br/zstd 需额外装包且服务端支持，别假设可用。④ TLS：verify=True 时自签名/过期证书会抛 SSLError（CERTIFICATE_VERIFY_FAILED），仅在被授权的测试环境才用 verify=False，且会伴随 InsecureRequestWarning。⑤ 连接复用：别靠 r.raw 私有属性硬取 socket，改用 urllib3 的 PoolManager 连接数统计、http.client debuglevel，或抓包来观测。",
+    "result": "实测：/redirect/2 时 allow_redirects=True→200、history 2 跳、final=/get；allow_redirects=False→302/Location=/relative-redirect/1/body 0 字节。/delay/5 配 timeout=1.5→ReadTimeout；不可达 IP 10.255.255.1 配 timeout=1.5→ConnectTimeout@1.51s。/gzip→Content-Encoding=gzip、Content-Length=413、len(content)=771（已自动解压）。self-signed/expired 证书 verify=True→SSLError CERTIFICATE_VERIFY_FAILED，verify=False→200/502B。/brotli→501 Not Implemented。连接复用探针 session_ports/fresh_ports 全 null。",
+    "retrospective": "requests 的『便利』会掩盖行为真相：不跟随重定向=空 body、超时是分阶段的、br 不是白送的、raw 私有属性会随版本变。排查网络问题时要把这条链路逐段显式化（history/Location、connect vs read、Content-Encoding、证书校验、池化统计），并且优先用公开 API 而不是私有属性观测。",
+    "harness": "Python requests",
+    "verified": true,
+    "status": "published",
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-23"
+  },
+  {
+    "id": "recipe-py-pagination-ignored-param",
+    "title": "分页靠路径数字：?page=2 被静默忽略仍返回第1页，跨页还有约17.8%重复需去重",
+    "tags": [
+      "pagination",
+      "scrape"
+    ],
+    "model": "Agent+Python requests",
+    "problem": "用 requests 抓某新闻门户『滚动新闻』列表翻 3 页时发现：改用 ?page=2 这类查询参数后服务端仍返回 HTTP 200、没有任何报错，内容却和第 1 页一模一样——分页被静默忽略。正确分页其实靠 URL 路径里的数字（/scroll-news/news1.html…newsN.html）。",
+    "dead_ends": [
+      {
+        "attempt": "用查询参数翻页：分别试 ?page=2、?pageNo=2、?p=2、?offset=30",
+        "failure": "四种参数全部 status=200、响应长度 len=93693，且内容集合与第 1 页 identical_to_page1=true、overlap=133/133 —— 参数被静默忽略，仍然返回第 1 页，无任何错误码或告警",
+        "duration": "4 次请求，每次 ~0.1-0.5s",
+        "early_signal": "响应长度与第 1 页字节完全一致（93693），状态码恒为 200，无法靠状态码区分"
+      },
+      {
+        "attempt": "把 3 页条目直接拼接后入库，不做去重",
+        "failure": "3 页 sum_naive=393 条，去重后 union_unique=323 条，dup_rate=0.178（约 17.8% 重复）；且 p1∩p2、p2∩p3、p1∩p3 三组两两重叠均恒为 35 条，疑似每页都插入了同一块固定推荐模块",
+        "duration": "3 次请求 + 集合比对",
+        "early_signal": "任意两页重叠数恒等 35，说明重复不是随机边界，而是固定复用模块"
+      },
+      {
+        "attempt": "以『返回 200 即翻页成功』为准，不校验内容是否变化",
+        "failure": "被忽略的 ?page=2 同样返回 200 与完整 HTML，肉眼扫一眼难以发现；必须把每页 URL 提取成集合做签名比对，才发现返回的是同一页",
+        "duration": "秒级",
+        "early_signal": "所有翻页请求 status 均 200，长度相同"
+      }
+    ],
+    "solution": "可跑要点：① 先确认分页形态——爬页面里『下一页』的锚点规律（本例为 /scroll-news/news{N}.html，纯路径数字），别想当然用 ?page=。② 每页提取条目 URL 做集合签名；若换参数后集合相等即判定『参数被忽略』，别信状态码。③ 入库前对全部 URL 做跨页去重（本例重叠 17.8%，且含固定复用模块），推荐用 set 或 URL 哈希。④ 固定复用/推荐模块可先按『在多页恒定出现』的特征识别并剔除。",
+    "result": "对某新闻门户滚动列表实测：正确路径页 news1/2/3.html 分别 133/129/131 条，去重后 union=323 条；?page=2、?pageNo=2、?p=2、?offset=30 四种参数全部被静默忽略（identical_to_page1=true）；两两页重叠恒为 35 条，整体重复率 17.8%。",
+    "retrospective": "分页有几件事永远别假设：翻页参数名、参数是否生效、页间是否重复。最稳的做法是『换一页→比对条目集合是否变化』来验证参数真的生效，再靠 URL 集合去重。这个门户接口对无效参数一律 200 且不报错，属于典型的静默失败，只有内容比对能抓到。",
+    "harness": "Python requests",
+    "verified": true,
+    "status": "published",
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-23"
+  },
+  {
+    "id": "recipe-py-portal-html-noise",
+    "title": "requests 抓某新闻门户首页：导航/平台入口/广告噪声占七成，正则取 <a> 当标题不可用",
+    "tags": [
+      "scrape",
       "selector"
     ],
-    "model": "Hy3",
-    "problem": "直觉用 WebFetch 直接抓某新闻门户首页，并让模型'列出所有可见新闻标题'，期望得到干净的新闻标题列表。实际返回 20+ 板块混合（娱乐/体育/彩票/小说推荐/广告），链接里混着追踪跳转域名与 HTML 注释噪声；同时 GBK 老站的编码问题被 WebFetch 自动解码完全掩盖，换裸请求时才会暴露乱码。",
+    "model": "Agent+Python requests",
+    "problem": "用 requests 抓某新闻门户首页想提取文章标题，结果一个页面上 649 个链接里只有约 30% 像文章，大量导航、平台入口、广告位、多频道入口和重复模板混在一起，用正则或『抓所有 <a>』根本分不出正文。",
     "dead_ends": [
       {
-        "attempt": "WebFetch 抓首页，prompt 要求'列出所有可见新闻标题（含导航/推荐/广告位）'。",
-        "failure": "返回约 20+ 板块，娱乐、体育、彩票、小说推荐、读书、广告位全混进'标题'列表，无法区分头条与广告/推荐；部分标题被页面截断为'...'。",
-        "duration": "1 次抓取（数秒）",
-        "early_signal": "输出里出现'大乐透解读''南宋最强帝婿''广告 | 腰间盘突出'等明显非新闻条目，与真实要闻混杂。"
+        "attempt": "正则抓所有 <a>...</a> 的文字当文章标题",
+        "failure": "200 条带文字的链接里，排前面的全是导航/平台入口而非新闻：如 '828企业服务平台'、'灵境·人民艺术馆'、'中组部12380举报网'、'传播内容认知全国重点实验室'；真正新闻标题被彻底淹没",
+        "duration": "1 次抓取 0.1s + 正则清洗（实测该门户响应极快）",
+        "early_signal": "a_with_text=200，但前 12 条样本里 0 条是新闻标题，全是机构/平台入口"
       },
       {
-        "attempt": "改用 prompt 只取'首页要闻区的新闻标题与链接'。",
-        "failure": "仍拿到污染链接：搜狐类首页的 markdown 泄漏了 <!--THE END--> 注释、track.sohu.com/promotion 追踪跳转，以及 edtsign/edtcode/scm 长串垃圾参数，链接无法直接用于二次爬取或归并。",
-        "duration": "1 次抓取（数秒）",
-        "early_signal": "提取的链接大量指向 track.sohu.com 重定向器，含 edtsign=… 参数，而非文章真实 URL。"
+        "attempt": "用『链接总数』估算文章数（把 total_href 当条目数）",
+        "failure": "total_href=649 严重虚高：真正 article_like（URL 含 /20xx/ 日期段）仅 194 条（29.9%），nav_like 150 条，external 605 条 —— 直接当文章数会有约 3 倍误差",
+        "duration": "秒级",
+        "early_signal": "Top hosts 是 finance/world/opinion/ent 等 5 个子频道域名，说明多频道入口全混在一页"
       },
       {
-        "attempt": "为确认中文编码，想观察 GBK 老站是否出现 Ã©ÂÂ 类乱码，直接用 WebFetch 抓。",
-        "failure": "WebFetch 自带 HTML→markdown 转换会自动按 charset 解码，中文显示完全正常，GBK 风险被彻底掩盖；一旦团队换用裸 HTTP（curl/requests）抓同一类老站，终端会看到乱码，且若用 errors='ignore' 会静默丢字符。本环境用 curl 探测外网时返回空（沙箱无外网），进一步说明编码须在 HTTP 层自行处理。",
-        "duration": "1 次抓取 + 1 次 curl 探测",
-        "early_signal": "WebFetch 输出中文完好，让人误以为'编码已无碍'，埋下换工具时踩坑的隐患。"
+        "attempt": "忽略 script/style，直接把整页 HTML 丢进清洗",
+        "failure": "script+style 占 HTML 字节 21.6%（noise_ratio=0.216），页面含 33 个 <script>、9 个 <style>、143 个 <img>、229 个 <div>；不剥离则正文与 JS/CSS 混作一团",
+        "duration": "秒级",
+        "early_signal": "count_script=33、script_bytes=19513，噪声占比 >20%"
       }
     ],
-    "solution": "① 不要'列所有标题'，按频道/容器限定抓取范围（如只取 /china/、/world/ 等具体要闻区），从源头减少噪声；② 对提取的链接做域名白名单过滤，丢弃 s.weibo.com、track.sohu.com、lottery、book、ad 等 host，再正则清洗 ? 后的 edtsign/scm 参数；③ 永远不要依赖 WebFetch 的自动解码判断编码——用裸请求时显式设置 response.encoding（或 requests 的 apparent_encoding），并加 'Ã' 序列 mojibake 哨兵检测，落库前报警；④ 标题截断的'...'用详情页补全。",
-    "result": "按频道限定 + 域名白名单过滤后，要闻区标题纯净度显著提升，链接均为可二次访问的真实文章 URL；GBK 风险通过'HTTP 层显式编码 + mojibake 哨兵'在换工具时成功拦截。",
-    "retrospective": "新闻门户的'乱'不在编码而在噪声结构，编码坑往往被高层工具悄悄抹平，真正要在裸请求层兜底。",
-    "skills": [
-      "web-fetch",
-      "html-to-markdown",
-      "selector-scoping",
-      "domain-filter"
-    ],
-    "harness": "WebFetch（只读抓取 + HTML→markdown 转换）；curl 用于编码探测（本环境沙箱无外网）",
-    "hardware": "云端托管抓取（无本地浏览器）",
-    "agent_config": "model=Hy3；采集策略=直觉先抓后治理",
+    "solution": "可跑要点：① 先用 URL 模式筛『文章』而非抓全部 <a>——本例文章 URL 含日期段，正则如 `/\\d{4}/\\d{2}-\\d{2}/` 或 `/20\\d{2}/`，可把 649 条压到 194 条候选。② 限定域名/频道前缀（如只取 www 主站的栏目路径），排除子频道与其他机构外链。③ 先剥离 <script>/<style>/<iframe> 再解析。④ 对重复链接文本去重（实测有 8 组重复模板文本）。⑤ 生产环境建议改用解析器 + 容器选择器按列表区块取条目，别全文正则。",
+    "result": "对某新闻门户首页实测：HTML 113637 字节、649 个链接；按日期段过滤得 article_like=194（29.9%），nav_like=150，external=605，重复链接文本 8 组；script+style 占 21.6%。正则取 <a> 无法定位正文，必须用 URL 模式过滤 + 去重。",
+    "retrospective": "门户首页不是『一页文章』而是一张导航地图：链接数 ≠ 文章数（本例虚高 3 倍）。先定型 URL 再写解析，比先写正则再打补丁省事得多；另外该门户同样命中 r.encoding=ISO-8859-1 / apparent=utf-8 的编码坑，取 r.text 前要修编码。",
+    "harness": "Python requests",
     "verified": true,
     "status": "published",
     "contributor_id": "anon-2f183a",
     "created_at": "2026-09-23"
   },
   {
-    "id": "recipe-scrape-infinite-scroll-truncation",
-    "title": "无限滚动feed单页抓取只拿到首屏批次，改用分页接口或驱动真实滚动补齐",
+    "id": "recipe-py-ratelimit-silent-headers",
+    "title": "连续请求限流观察：18 次全 200、0 个 429，限流却藏在 X-RateLimit-Remaining（57→43）与 CDN HIT/MISS 里",
     "tags": [
       "scrape",
-      "pagination",
+      "rate-limit",
       "timing"
     ],
-    "model": "Hy3",
-    "problem": "抓取某产品发现社区首页（前端无限滚动 feed）时，直觉用 WebFetch 整页一次性转 JSON，期望拿到全量产品列表。实际只拿到首屏服务器渲染的一批（约39个），且页面还有“加载更多”批次未被抓取；同时 Markdown 提取把 JS 重复渲染的区块标题重复输出，造成结构错位。",
+    "model": "Agent+Python requests",
+    "problem": "判断『连续抓取会不会被限流』时，最容易只看 HTTP 状态：连续 15-18 次请求全部 200、没有 429，就下结论『该站不限流』。真跑发现这个结论不可靠——一个站用响应头静默计数限流（耗尽才拒绝），另一个站前 16 次全被 CDN 缓存挡下、根本没打到源站，状态码和耗时都毫无信息量。",
     "dead_ends": [
       {
-        "attempt": "直接用 WebFetch 抓社区首页，要求模型列出所有产品并转 JSON 数组",
-        "failure": "只返回首屏约39个产品；feed 中“更早的帖子/加载更多”批次完全缺失；并且区块标题 “Top Products Launching Today” 在输出中重复出现 5~6 次（JS 重复节点被扁平化提取成 artifact），形成重复/错位行",
-        "duration": "1 次请求，即时返回",
-        "early_signal": "返回数量明显有界（停在 #39），且同一区块标题被多次重复输出，说明只抓到首屏且提取有重复节点问题"
+        "attempt": "对某静态站（CDN 托管）连续发 18 次请求（URL 带不同 ?probe=N 参数），全部返回 200，据此判定『站点无速率限制』",
+        "failure": "status_counts={'200': 18}、saw_429=False，看似无限流；但逐条看响应头：cf-cache-status 为 16×HIT、2×MISS，且两次 MISS（第 17、18 次）耗时 1240ms、1211ms，是 HIT 平均耗时（≈286ms）的 4 倍多。说明 18 次请求里绝大多数被 CDN 缓存直接挡下、并未真正抵达源站，『全 200』无法证明源站不限流",
+        "duration": "18 次共约 7s（ms 249~1240，avg 386）",
+        "early_signal": "cf-cache-status=HIT/MISS 混杂；MISS 两次耗时骤增至 1200ms+；响应体恒为 559 字节、sha1 全同"
       },
       {
-        "attempt": "假设“重复请求同一 URL 即可累加上下文、凑齐全量”，再次 WebFetch 同一首页",
-        "failure": "第二次返回结果与第一次完全一致（同样约39个、标题同样重复），没有任何 #40 及之后的产品；WebFetch 不会执行前端滚动，无法触发 IntersectionObserver 加载后续批次",
-        "duration": "第 2 次请求，即时返回",
-        "early_signal": "两次结果集合高度重合、零新增，证明同 URL 重复抓无法触发滚动加载"
+        "attempt": "对某公开 API 站连续发 15 次请求，没看到 429/403 就认为『该站不限流，可以随便抓』",
+        "failure": "status_counts={'200': 15}、saw_429=False，但响应头 X-RateLimit-Remaining 从 57 逐次递减到 43（每请求 -1；X-RateLimit-Limit=60，X-RateLimit-Reset=1790151929）。限流一直在静默计数，只是额度没耗尽才没拒绝——按这个速率再发约 43 次就会撞墙",
+        "duration": "15 次共约 3.2s（ms 165~490，avg 210）",
+        "early_signal": "X-RateLimit-Remaining 单调递减 57→56→…→43；响应恒 200、body 恒同（distinct_sha1=1）"
       }
     ],
-    "solution": "1) 先识别页面是 CSR/无限滚动（看 “load more”、分页游标、IntersectionObserver）。2) 不要反复抓同一 HTML 页，改用站点底层分页接口（多数 feed 用 ?cursor= / &after= 或 /api/feed?offset=）。3) 用 offset/cursor 循环分批拉取直到无新数据。4) 若只能拿 HTML，用 headless 浏览器（Playwright/Puppeteer）驱动真实滚动到底再读 DOM，而不是 WebFetch。5) 提取时按固定区块选择器聚合，剔除 Markdown 扁平化产生的重复标题。",
-    "result": "实测：同一社区首页重复 WebFetch 两次均仅 ~39 条首屏、集合零新增、标题重复；确认 WebFetch 类无头静态请求无法触发前端滚动加载。换用底层分页接口/驱动真实滚动是可复用的正确解法。",
-    "retrospective": "直觉误把“整页 HTML”等同于“全量数据”。无限滚动的数据根本不在首屏 HTML 里，而在前端滚动后异步拉取的接口。无头抓取必须绕开“滚动”这个交互，直接打接口或用浏览器驱动滚动。",
-    "skills": [],
-    "harness": "WebFetch（无头静态抓取 + Markdown 转换）",
-    "hardware": "云端执行环境，无本地浏览器",
-    "agent_config": "单次 WebFetch，prompt 要求整页转 JSON",
+    "solution": "可复用步骤：① 判限流别只看 status——同时记录并比对四类信号：(a) 状态码是否出现 429/403/503；(b) 响应头 X-RateLimit-Remaining / Retry-After 是否递减或出现；(c) 逐次耗时 ms 是否随请求数抬升；(d) 响应体长度/sha1 是否突变（内容降级）。② 用 X-RateLimit-Remaining 递减做『还剩多少预算』的硬判据，逼近阈值（如 <10）就主动停。③ 看到 cf-cache-status=HIT 要知道请求没到源站，别把 CDN 缓存命中当成『站方不限流』。④ 退避策略：命中 Retry-After 优先按它等待；否则指数退避 sleep = base * 2^n（base 0.5~1s，加 jitter），并对 429/403/503 停止重试。⑤ 连续探测给每条请求加唯一查询参数避免缓存误判，同时用 time.sleep 控制节奏。",
+    "result": "实测：静态站 18 次全 200、0×429，cf-cache-status 16×HIT+2×MISS，MISS 耗时 1240/1211ms vs HIT≈286ms；API 站 15 次全 200、0×429，X-RateLimit-Remaining 由 57 递减至 43（Limit=60）。两站均未触发硬限流，但均存在可观测的限流/缓存信号。",
+    "retrospective": "『没被限流』和『没看到限流信号』是两回事。真限流往往先静默计数（响应头）、再降速、最后才 429；而 CDN 缓存会把『压力测试』变成『读缓存』，让你误以为畅通。观察限流要盯响应头+耗时的趋势，而不是单看某一次的状态码。",
+    "harness": "Python requests",
     "verified": true,
     "status": "published",
     "contributor_id": "anon-2f183a",
     "created_at": "2026-09-23"
   },
   {
-    "id": "recipe-scrape-js-render-shell",
-    "title": "抓JS动态站列表：静态请求只拿到外壳，命中SSR端点才出正文",
+    "id": "recipe-py-session-cookie-lost",
+    "title": "requests.get 之间 cookie 静默丢失：Set-Cookie 挂在 302 跳上、r.cookies 却是空的，只有 Session 才真正保留",
+    "tags": [
+      "session",
+      "scrape"
+    ],
+    "model": "Agent+Python requests",
+    "problem": "抓某公开 HTTP 测试服务时，先请求一个『设置 cookie 并 302 跳到回显页』的标准回显端点(路径如 /cookies/set)，再用 requests.get 单独请求回显端点(/cookies)想读回 cookie，结果拿到空对象 {'cookies': {}}。直觉以为『requests 会自动保存并带上 cookie』，实际每一次 requests.get 都是彼此独立的一次会话，cookie 不会跨调用保留；更阴的是，想拿第一次响应的 r1.cookies 手动搬运，r1.cookies 也是空的。",
+    "dead_ends": [
+      {
+        "attempt": "直接连续两次 requests.get：先 GET /cookies/set?sid=abc123&t=xyz（服务端 302 跳 /cookies 回显），再 GET /cookies 读 cookie",
+        "failure": "第二次返回 {'cookies': {}}——cookie 完全丢失，请求里根本没带上去；第一次之所以在响应里看到 {'sid':'abc123','t':'xyz'}，只是因为 302 跳转是在同一次调用内部完成的",
+        "duration": "实测单次约 0.29s / 1.28s（r.elapsed），排查加改方案合计约 8min",
+        "early_signal": "第二次响应体是空对象 {}，而第一次有值；两次是独立的 get 调用，没有共享 jar"
+      },
+      {
+        "attempt": "想用首次响应对象手动搬运：requests.get(..., cookies=r1.cookies)",
+        "failure": "仍然是 {'cookies': {}}——因为 Set-Cookie 挂在 302 那一跳上，而 r1.cookies 只反映『最终』响应（跳转后的 200 回显页）的 cookie 集合，回显页本身并不 Set-Cookie，故 r1.cookies 为空",
+        "duration": "秒级（一次请求）",
+        "early_signal": "r1.cookies == {} 但 r1.history == [302]，真正带 cookie 的是 r1.history[0].cookies"
+      },
+      {
+        "attempt": "改从重定向链汇总 cookie 再手动塞回下次请求：jar={} ; for h in r1.history: jar.update(h.cookies) ; requests.get('/cookies', cookies=jar)",
+        "failure": "这次确实拿到了 {'cookies': {'sid': 'abc123'}}，但要手工遍历 history、拼 jar，一旦站点有多次跳转/多组 Set-Cookie/HttpOnly 属性，手工搬运极易漏项，且 cookie 轮换后即失效",
+        "duration": "约 3min 才把 history 汇总写对",
+        "early_signal": "需要写循环遍历 r.history 才能凑齐 cookie，说明思路已经偏了——正确做法是让库来管"
+      }
+    ],
+    "solution": "可跑要点：① 需要跨请求保留 cookie/登录态时，用 requests.Session()，同一次 s.get() 序列会自动共享 cookie jar：s.get(set); s.get('/cookies') -> {'cookies': {'sid': 'abc123'}}。② 别把 requests.get 当成会自己记 cookie 的浏览器；每个顶层 get 都是独立会话。③ 若确实要手动搬运，注意 Set-Cookie 可能在重定向的中间响应上（r.history[i].cookies），而不是最终响应 r.cookies。④ 抓需登录/多步交互的页面前，先确认是否 Session；无 Session 反复 get 会一轮一个新身份。⑤ 不要手写 Cookie 请求头硬编码值——轮换/过期即坏。",
+    "result": "实测同一公开测试服务：直觉两次独立 get -> 第二次 {'cookies': {}}（丢失）；改用 Session -> {'cookies': {'sid': 'abc123'}}（保留）；手动 cookies=r1.cookies -> 仍 {}（因 r1.cookies 为空，Set-Cookie 在 r1.history[0] 的 302 上，history=[(302, {'sid':'abc123'})]）；手动汇总 history 再搬运 -> 才成功。",
+    "retrospective": "三条忠告：a) requests.get 不等于浏览器，cookie 不跨调用；要状态就用 Session。b) 看 Set-Cookie 时要意识到它可能落在重定向链的中间响应上，最终响应的 .cookies 未必有你想要的。c) 能交给库管理的状态（cookie jar、连接池、默认头）就不要手工搬运，手工方案在真实站点上必然漏项。",
+    "harness": "Python requests",
+    "verified": true,
+    "status": "published",
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-23"
+  },
+  {
+    "id": "recipe-py-spa-empty-shell",
+    "title": "requests 抓某短视频站首页：200 却返回 <body></body>，正文 0 字符、99.9% 是 JS",
     "tags": [
       "scrape",
       "headless"
     ],
-    "model": "Hy3",
-    "problem": "想抓某社交媒体平台的热搜榜列表与某视频站的排行榜，直觉用 WebFetch 直接抓首页，期望拿到可枚举的条目列表。",
+    "model": "Agent+Python requests",
+    "problem": "用 requests 抓某短视频站（SPA）公开首页，拿到了 200 和 72KB HTML，但去掉标签后正文字符为 0，页面上所有内容（推荐流/视频/作者/评论）都不在静态 HTML 中，正文靠 JS 渲染，requests 只能拿到空壳。",
     "dead_ends": [
       {
-        "attempt": "WebFetch 抓某社交媒体平台首页，prompt 要'热搜榜条目（带排名）'。",
-        "failure": "返回的是用户时间线/推荐微博（如王楚钦孙颖莎赛况、明星动态），并非热搜排名榜；热搜榜由独立 XHR 接口填充，不在首屏 SSR HTML 中。",
-        "duration": "1 次抓取（数秒）",
-        "early_signal": "输出是具体微博博文而非带序号/热度值的热搜词，没有排名。"
+        "attempt": "requests 设浏览器 UA 抓首页后，直接正则 / html.parser 提取正文文本",
+        "failure": "返回的 HTML 里 <body></body> 内部去除标签后仅 0 字符（body_inner_len=0），剥离 script/style 后 visible_text=0 字符；'推荐/关注/视频/作者/播放/点赞/评论/热榜/直播/首页' 10 个渲染后关键词命中 0 个（0/10）",
+        "duration": "单次抓取约 40s（该站响应慢），解析 <0.1s",
+        "early_signal": "72,914 字节里 2 个 <script> 占 99.9%（script_bytes=72,815），body 内无任何文本节点"
       },
       {
-        "attempt": "WebFetch 抓某短视频平台首页，prompt 要'推荐视频标题列表'。",
-        "failure": "只返回 logo 与'下载APP/下载抖音看更多/下载AI抖音发起搜索'等图片与按钮，纯客户端渲染（CSR）外壳，零视频标题。",
-        "duration": "1 次抓取（数秒）",
-        "early_signal": "整页只有一张 base64 logo 和若干'下载'引导图，无任何视频条目文字。"
+        "attempt": "用 requests 默认 UA 抓取该首页",
+        "failure": "返回非标准码 444，body 仅 115 字节：'<!DOCTYPE html><html><body><h1>Access Denied</h1><p>X-TT-System-Error: 3</p><p>Oncall ID: 783</p></body></html>'",
+        "duration": "约 40s",
+        "early_signal": "status=444（非标准码）、Content-Type=text/html 但长度仅 115，body_text 仅 51 字符"
+      },
+      {
+        "attempt": "用 html.parser 提取可见文本当成页面内容",
+        "failure": "visible_text_len=0，输出空串；期望的渲染后内容（视频标题 / 作者名等）一个都取不到",
+        "duration": "秒级",
+        "early_signal": "HTMLParser 收集到的 texts=[]，可见文本为空"
       }
     ],
-    "solution": "① 区分'首屏 SSR 是否含列表'：先用 WebFetch 探首页，若拿到骨架/下载引导即判定为纯 CSR，需 headless 浏览器（Playwright/Puppeteer）等待渲染，或调用站点公开 JSON API；② 目标列表常驻'专用 SSR 端点'：该社交平台热搜实际由 /top/summary 这类服务端渲染页提供，直接抓该端点即可拿到带排名+热度值的完整 50 条，无需渲染；③ 视频站排行榜（如 B站 rank 页）首屏 SSR 已含完整 100 条，WebFetch 直接成功——并非所有'动态站'都需渲染，要逐页验证再决定是否上浏览器。",
-    "result": "命中社交平台热搜专用 SSR 端点后，一次抓取即得到 50 条带热度值的热搜词；视频站排行榜首屏即含 100 条，WebFetch 直出。纯 CSR 的短视频首页则需 headless/API，WebFetch 无解。",
-    "retrospective": "动态站先探 SSR 端点再决定是否上 headless，别一上来就开浏览器烧资源。",
-    "skills": [
-      "web-fetch",
-      "ssr-endpoint-probing",
-      "headless-fallback",
-      "json-api"
-    ],
-    "harness": "WebFetch（只读）；建议 headless 浏览器作为 CSR 兜底",
-    "hardware": "云端托管抓取（无本地浏览器）",
-    "agent_config": "model=Hy3；策略=先探测端点后渲染",
+    "solution": "可跑要点：① 先做『SPA 空壳体检』——抓完后计算 body 内去标签文本长度与 <script> 占比；若 script 占比接近 1 且可见文本≈0，即判定正文靠 JS。② requests 只能拿到外壳，真正数据需执行 JS（Playwright/Selenium 等 headless 浏览器），或改抓页面内嵌的 XHR/API 接口。③ 抓取前先设浏览器 UA，否则连外壳都拿不到（默认 UA 直接 444）。④ 若改走接口，用浏览器 Network 面板定位 XHR，直接用 requests 请求该 API。",
+    "result": "对某短视频站首页实测：默认 UA → 444（115 字节 Access Denied）；浏览器 UA → 200 / 72,914 字节，但 body 去标签文本 0 字符、可见文本 0 字符、<script> 占 99.9%，10 个渲染后关键词全部 0 命中。requests 只能拿到 JS 外壳，正文须 JS 执行。",
+    "retrospective": "200 且体积大 ≠ 有内容。对 SPA 要先做『空壳体检』（可见文本长度 / script 占比 / 关键词命中）再决定是否上 headless，否则白解析一场。该站还叠加了默认 UA→444 的反爬，需两步都过。",
+    "harness": "Python requests",
     "verified": true,
     "status": "published",
     "contributor_id": "anon-2f183a",
     "created_at": "2026-09-23"
   },
   {
-    "id": "recipe-scrape-pagination-dedup",
-    "title": "翻分页列表：用错page参数静默重复首页，offset步长不对边界重叠",
-    "tags": [
-      "scrape",
-      "pagination"
-    ],
-    "model": "Hy3",
-    "problem": "抓某电影榜单（Top250）这类带分页的公开列表并翻 3 页，直觉用常见 ?page=N 翻页，再合并去重得到完整榜单。",
-    "dead_ends": [
-      {
-        "attempt": "用 ?page=2 翻第 2 页（沿用多数 CMS 的 page 参数习惯）。",
-        "failure": "服务端忽略 page 参数，返回与第 1 页完全相同的 25 条（首条仍是 rank#1 肖申克的救赎），造成静默整页重复；若直接 append 会污染数据集 25 条重复。",
-        "duration": "1 次抓取（数秒）",
-        "early_signal": "本页第一条仍是'肖申克的救赎'(排名1)，而非预期的排名26，说明 page 未生效。"
-      },
-      {
-        "attempt": "改用 ?start=10 试探偏移（误以为每页 10 条）。",
-        "failure": "实际每页 25 条，start=10 返回排名 11–35，与第 1 页(1–25)在 11–25 区间重叠 15 条，产生边界重复。",
-        "duration": "1 次抓取（数秒）",
-        "early_signal": "本页从排名11开始，与首页尾部 11–25 重复。"
-      }
-    ],
-    "solution": "① 先抓一页并解析真实分页控件：该站用 start= 偏移、页大小 25，规律为 start=(page-1)*25；② 永远用稳定 item id（本例为影片 subject URL 或排名）做集合去重后再 append，杜绝 page 参数失效导致的整页重复；③ 即便 offset 正确，对实时/无限滚动列表也要按 id 去重，因为插入式更新会造成边界重叠；④ 翻页间隔加延时，规避反爬/验证码。",
-    "result": "用 start=(page-1)*25 翻 3 页(start=0/25/50)得到排名 1–75 连续无重叠的 75 部电影；对比实验证明 ?page=2 会静默返回首页、?start=10 会重叠 15 条。",
-    "retrospective": "分页先看控件再翻页，合并前必按 id 去重——'page 参数失效'比 403 更阴险，因为它不报错。",
-    "skills": [
-      "web-fetch",
-      "pagination-probing",
-      "offset-calc",
-      "id-dedup"
-    ],
-    "harness": "WebFetch（只读）",
-    "hardware": "云端托管抓取（无本地浏览器）",
-    "agent_config": "model=Hy3；策略=先验证分页控件",
-    "verified": true,
-    "status": "published",
-    "contributor_id": "anon-2f183a",
-    "created_at": "2026-09-23"
-  },
-  {
-    "id": "recipe-session-401-public-api-notoken",
-    "title": "抓需 token 的公开 API：WebFetch 无法带 Authorization 头，裸请求 401，必须换能设请求头的工具",
-    "tags": [
-      "session",
-      "auth-wall",
-      "scrape"
-    ],
-    "model": "Hy3",
-    "problem": "直觉用 WebFetch 直接抓'需鉴权的公开 API'（如取当前用户的 REST 端点、按城市查天气的端点），以为公开 API 也能像普通网页一样裸抓。实际：这类端点必须带 token/API key，WebFetch 既无法在请求里加 Authorization 头、也无法可靠传 query token，结果一律 401/空响应。",
-    "dead_ends": [
-      {
-        "attempt": "WebFetch 直接抓某公开代码托管平台的 REST API 的'当前用户'端点（/user），不带任何 token。",
-        "failure": "返回 HTTP 401，JSON 体为 {message: 'Requires authentication', status: 401}，拿不到任何用户数据。",
-        "duration": "1 次抓取（秒级）",
-        "early_signal": "状态行直接是 401，body 明确说需要鉴权，而非返回空列表或重定向——说明是鉴权缺失而非限流。"
-      },
-      {
-        "attempt": "想'糊弄'过鉴权：在同一端点 URL 后加 ?access_token=<编造的假 token> 再 WebFetch。",
-        "failure": "依旧 401，JSON 体仍为 {message: 'Requires authentication', status: 401}——该端点不认 query 里的假 token，或仍被当作未认证。",
-        "duration": "1 次抓取（秒级）",
-        "early_signal": "假 token 既没让请求变成已认证，也没变成 403（无效 token），而是维持 401，提示 WebFetch 这一层根本没法把有效凭据送进去。"
-      },
-      {
-        "attempt": "换某公开天气数据 API 的 /weather 端点（按城市查天气），同样不带 appid，并在 prompt 里'假装'带了 key。",
-        "failure": "返回 401 JSON：{cod: 401, message: 'Invalid API key...'}，确认又一类公开 API 需要 key，且 WebFetch 透传不了 key。",
-        "duration": "1 次抓取（秒级）",
-        "early_signal": "错误码 401 + 'Invalid API key'，与代码托管平台 401 同源——公开 API 的'需 key'是普遍约束，不是单站特例。"
-      }
-    ],
-    "solution": "① 识别'公开 API 但需 token/key'这类端点：裸抓必 401，先读其文档确认鉴权方式（Header Bearer / Query key）。② WebFetch 无法设置自定义请求头，所以即便手里有合法 token 也塞不进去——必须换能设头的工具：curl -H 'Authorization: Bearer <TOKEN>' 或 Python requests.get(url, headers={...})。③ token 一律放环境变量/密钥库，绝不写进配方或硬编码；本任务全程只用编造的假 token 与纯公开端点，绝不碰需真登录的页面、绝不获取他人私密 token。④ 401 与 403 要区分：401=没带/带错凭据（补 token），403=带了但无权限（换账号/降权），不要混为一谈重试。⑤ 反爬/鉴权遇阻即停。",
-    "result": "确认 WebFetch 对'需鉴权公开 API'无解（无自定义头能力），改用 curl/requests 带 Authorization 头即可正常取数；全程零真实凭据、零登录页接触，符合安全边界。",
-    "retrospective": "WebFetch 是'无头只读浏览器'，不是 HTTP 客户端——它擅长抓网页、不擅长调 API。凡是'要在请求头里塞东西'的采集，第一时间换 curl/requests，别在 WebFetch 上耗。",
-    "skills": [
-      "web-fetch",
-      "http-header",
-      "api-auth",
-      "token-management",
-      "curl"
-    ],
-    "harness": "WebFetch（只读抓取，不支持自定义请求头）；对照用 curl/requests 思路（未实际执行真实凭据请求）",
-    "hardware": "云端托管抓取（无本地浏览器）",
-    "agent_config": "model=Hy3；采集策略=直觉先裸抓后补鉴权",
-    "verified": true,
-    "status": "published",
-    "contributor_id": "anon-2f183a",
-    "created_at": "2026-09-23"
-  },
-  {
-    "id": "recipe-shadow-dom-iframe-crossorigin-block",
-    "title": "抓组件库文档的实时示例与 Web Component 渲染结果：shadow DOM 与跨域 iframe 双双取不到",
-    "tags": [
-      "shadow-dom",
-      "selector",
-      "scrape"
-    ],
-    "model": "Hy3",
-    "problem": "直觉用 WebFetch 直接抓某组件库文档站，想'取出 <sl-button> 渲染后的真实按钮文字/样式，以及文档里的交互式实时示例'，以为 HTML→markdown 会把所有可见内容都转出来。实际：Web Component 把渲染结果塞进 shadow DOM（靠 JS 挂载），而文档站的交互示例又放在跨域 iframe 里——两者都不在 WebFetch 拿到的静态 HTML 中。",
-    "dead_ends": [
-      {
-        "attempt": "WebFetch 抓某 Web Component 组件库文档站的 <sl-button> 页面，prompt 要求'列出组件渲染后的真实按钮文字、shadow DOM 内部结构（shadow root 里的 <button> 与 class）'。",
-        "failure": "返回的全是文档站的普通 DOM 内容：组件源码片段、Properties/Events/Parts 表格，以及 ::part(base) 这类 CSS 选择器描述；但 prompt 要的'渲染后的真实 <button> 元素''shadow root 内部结构'完全缺席——JS 挂载的 shadow root 没有被任何节点体现。",
-        "duration": "1 次抓取（秒级）",
-        "early_signal": "输出里只有 sl-button.pink::part(base) 这样的样式代码，从头到尾没有出现一个真实的 shadow <button> 元素，说明 shadow root 没被转换出来。"
-      },
-      {
-        "attempt": "WebFetch 抓某前端技术文档站的 'Try it' 交互式示例页，prompt 要求'读出跨域 iframe（live sample，托管在另一子域）内渲染出来的彩色方块/代码运行结果'。",
-        "failure": "返回外层页面文字（'## Try it' 标题、静态代码示例、规范链接），但跨域 iframe 内部的实时渲染内容一个节点都没有——彩色示例、运行结果 DOM 全部缺失。",
-        "duration": "1 次抓取（秒级）",
-        "early_signal": "输出里有 'Try it' 这一节标题却没有任何对应渲染体，确认跨域 iframe 内容未被内联抓取；对照同域 iframe（某前端教学站 Tryit 结果框）WebFetch 反而能抓到内部 HTML，反向证明 blocker 是'跨域'而非'iframe'本身。"
-      }
-    ],
-    "solution": "① 先分清'文档站普通 DOM'与'组件运行时渲染的 shadow DOM'：WebFetch 只做静态 HTML→markdown，JS 渲染的 shadow root 永远不在结果里；组件库的属性/事件/Parts 表通常在普通 DOM，可直接 WebFetch 拿，真正缺的是'渲染后的视觉/交互'。② 要拿 shadow 内容，必须用能执行 JS 的无头浏览器（Playwright/Puppeteer）并访问 element.shadowRoot，或对 open shadow root 直接请求组件仓库里的 demo HTML。③ 对 iframe 先查 src 域名是否同域：同域 iframe WebFetch 能顺带抓到内部 HTML；跨域 iframe（MDN interactive example、YouTube 播放器等）WebFetch 抓不到，需用无头浏览器用 page.frames() 切到对应 frame 上下文提取，或直接对 iframe 的 src URL 单独发请求（若服务端允许）。④ 反爬/跨域遇阻即停，不强行穿透。",
-    "result": "明确 shadow DOM 与跨域 iframe 都是 WebFetch 的能力边界：组件 API 表（普通 DOM）可正常采集，渲染结果与跨域 iframe 内容必须换 headless 方案。对照同域 iframe 被成功抓到，定位到根因是'跨域'而非'iframe'。",
-    "retrospective": "坑不在'内容藏得深'，而在'内容靠 JS 活在另一棵树（shadow root）或另一个源（cross-origin frame）里'；高层抓取工具把这两类树悄悄抹平，只有换能跑 JS / 能进 frame 的工具才露馅。",
-    "skills": [
-      "web-fetch",
-      "shadow-dom",
-      "cross-origin-iframe",
-      "headless-browser",
-      "selector-scoping"
-    ],
-    "harness": "WebFetch（只读抓取 + HTML→markdown，无 JS 执行、无 frame 切换）",
-    "hardware": "云端托管抓取（无本地浏览器）",
-    "agent_config": "model=Hy3；采集策略=直觉先抓后治理",
-    "verified": true,
-    "status": "published",
-    "contributor_id": "anon-2f183a",
-    "created_at": "2026-09-23"
-  },
-  {
-    "id": "recipe-table-html-to-json-export",
-    "title": "HTML表格转JSON：直接抓表格页丢整表，改抓站点官方CSV/XML导出",
+    "id": "recipe-py-table-merged-cells",
+    "title": "requests 解析含 rowspan/colspan 的表格：每行单元格数参差 [3,4,5,...]，列直接错位",
     "tags": [
       "scrape",
       "selector"
     ],
-    "model": "Hy3",
-    "problem": "想把某公开数据注册表（端口号/服务名）的结构化表格转成 JSON。直觉直接 WebFetch 表格所在 HTML 页，期望拿到全表；实际要么整站被环境屏蔽，要么 HTML 页只返回说明文字、真正的数据表被整张丢弃；而合并单元格（rowspan）这类问题在 HTML 路径下还会进一步错位。",
+    "model": "Agent+Python requests",
+    "problem": "抓含合并单元格的公开表格后，按『每个 <tr> 的 <td> 数=列数』直接取数会错位：多行表头 + rowspan/colspan 让各行单元格数不一致，且部分表的 tbody 为空（数据靠 JS 填充），照常解析只能拿到表头。",
     "dead_ends": [
       {
-        "attempt": "WebFetch 某百科 GDP 排名表页，要求把主表转 JSON 数组（含全部行）",
-        "failure": "连续 3 次均返回 Error: fetch failed——该域在本执行环境被整体屏蔽（连 Main_Page 与 API 端点都打不开），根本拿不到页面",
-        "duration": "3 次请求",
-        "early_signal": "每次都是 fetch failed 而非 404/内容异常，连首页都打不开 → 是域名级屏蔽，不是 URL 写错"
+        "attempt": "把每个 <tr> 的 <td>/<th> 数当作列数、逐行读取",
+        "failure": "某统计机构公报数据表 221 行，逐行单元格数为 [3,4,5,5,5,...] 参差不齐（首行 3 个、其余 5 个），表头 colspan 合并列后与数据列对不上；某彩票开奖表两行表头逐行 [8,4]，与展开后的 10 列完全错位",
+        "duration": "单页抓取约 27s（1.43MB），解析秒级",
+        "early_signal": "naive_widths 集合大小 >1（ragged=True），列数与展开宽度（5 / 10）不符"
       },
       {
-        "attempt": "换源：WebFetch 某公共协议/端口号注册表的 HTML 表格页，要求抽取表格为 JSON",
-        "failure": "返回的是页面说明段落（Note/Reference/Available Formats），真正上千行的数据表整张被丢弃，0 行数据被捕获，无法转 JSON",
-        "duration": "1 次请求",
-        "early_signal": "输出里没有任何端口/服务名数据行，只有页头说明文字 → 大表在 Markdown 转换阶段被漏掉"
+        "attempt": "把第一行当表头、其余行当数据",
+        "failure": "遇到双行表头（如 '指标 | 12月 | 1-12月' 下再一行 '绝对量 | 同比增长（%）'）时，第二行表头被当成第一条数据；且展开后表头行与数据行列数不同",
+        "duration": "秒级",
+        "early_signal": "展开后 grid[:2] 两行都像表头（'指标'/'绝对量'/'同比增长'），数据从第 3 行才开始"
+      },
+      {
+        "attempt": "直接解析某彩票开奖公告的表体取开奖数据",
+        "failure": "表头解析正常（rowspan×6 + colspan×2 展开成 10 列），但 <tbody></tbody> 为空——0 行数据，开奖号码根本不在静态 HTML 里（AJAX/JS 填充）",
+        "duration": "单页 62,622 字节，秒级",
+        "early_signal": "n_rows=2（仅表头），tbody 内 0 数据行，展开网格只有 2 行表头"
+      },
+      {
+        "attempt": "忽略编码直接取中文单元格文本",
+        "failure": "两站响应头编码均被判为 ISO-8859-1，直接取值是乱码（'期号' → 'æå·'）；实际应为 utf-8",
+        "duration": "秒级",
+        "early_signal": "r.encoding='ISO-8859-1' 而页面实际为 utf-8"
       }
     ],
-    "solution": "1) 优先找站点官方机器可读导出（CSV/XML/JSON）：多数数据注册表在页面底部提供 export 链接，直接抓导出文件而非 HTML 页。2) 用官方 CSV/XML 导出天然规避合并单元格——每行字段已显式展开，不存在 rowspan 垮行问题。3) 字段映射：先读首行列标题，按列位置把需要的列映射成稳定 key（如 Service Name→service_name），不依赖模型猜列。4) 空字段统一保留 key 并置空字符串或明确 null，保持 schema 一致；端口范围（如 225-241）原样保留为字符串，不擅自拆分。5) 若站点无导出、必须解析 HTML，先定位具体 <table> 节点，按表头索引填充，并对 rowspan 单元格向被覆盖行回填同一值。",
-    "result": "实测：某公共注册表 HTML 页 WebFetch 丢弃整表；改抓其官方 .csv 后成功解析约 850+ 行，字段映射 service_name/port_number/protocol/description，空 service_name 行、空 protocol 行、端口范围行均正确处理。合并单元格问题在 CSV 导出路径下不复存在。",
-    "retrospective": "直觉误以为“网页上的表格=可以整表抓”。大表要么被 Markdown 转换漏掉，要么被合并单元格/跨行搞乱。最稳的路子是找官方结构化导出，把“表格解析”问题降级为“列映射”问题。",
-    "skills": [],
-    "harness": "WebFetch",
-    "hardware": "云端执行环境",
-    "agent_config": "单次 WebFetch，提示要求整页表格转 JSON；后改抓 .csv",
+    "solution": "可跑要点：① 不要用『每行 td 数』当列数；先按 rowspan/colspan 展开成规整网格（维护 pending rowspan 占位，逐行填充被上方合并占用的列）。② 表头可能多行，取前 1–2 行做表头并合并（如 colspan 的父列名 + 子列名拼成 '一等奖-注数'）。③ 显式修正编码（默认 ISO-8859-1 时用 apparent_encoding / 站点 charset，实测应设为 utf-8）。④ 解析前先查 tbody 是否有数据行；若为空说明数据靠 JS，应改找 XHR/API。⑤ 用解析器（html.parser / lxml）而非正则切表。",
+    "result": "某统计机构公报（1.43MB）含 4 表：数据表 221 行、逐行单元格数 [3,4,5,5...] 参差、colspan 3 处 + rowspan 1 处、空单元格 60 个、展开宽度 5，双行表头。某彩票开奖公告表表头 rowspan×6 + colspan×2 展开 10 列，但 tbody 为空、0 行数据。两站响应头编码均误报 ISO-8859-1（实为 utf-8）。",
+    "retrospective": "表格的『列』不等于『每行 td 数』——合并单元格必须先展开网格再对齐。另外要先确认 tbody 到底有没有数据：静态表头 + 空 tbody 说明数据是后端接口给的，继续抠 HTML 是死路。",
+    "harness": "Python requests",
+    "verified": true,
+    "status": "published",
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-23"
+  },
+  {
+    "id": "recipe-py-ua-diff-nonbrowser",
+    "title": "requests 默认 UA 遭差异对待：同 200 却 290 字符 vs 17626 字符正文，另有 403/444/跳登录",
+    "tags": [
+      "anti-bot",
+      "scrape"
+    ],
+    "model": "Agent+Python requests",
+    "problem": "用 requests 默认 UA（python-requests/2.34.2）抓公开页，站方按 UA 差异处理：同一搜索站同为 200 却返回被裁剪的骨架页；问答站直接 403 JSON；短视频站 444；而有的站（代码托管）对 UA 完全不敏感。只看 status 会把残缺页当成功。",
+    "dead_ends": [
+      {
+        "attempt": "requests 默认 UA 抓某搜索站公开首页，按 status==200 认为成功",
+        "failure": "默认 UA 返回 200 但仅 2,443 字节、去标签正文 290 字符；换浏览器 UA 后同一 URL 200 返回 29,506 字节、正文 17,626 字符（≈60 倍），默认 UA 拿到的是残缺骨架",
+        "duration": "每次约 42s（该搜索站响应慢）",
+        "early_signal": "两 UA 的响应体 sha1 不同（3aea39f7fdb8 vs de6f7b406a8e），body_text 290 vs 17626"
+      },
+      {
+        "attempt": "默认 UA 抓某问答站首页",
+        "failure": "返回 403，Content-Type=application/json，body 214 字节：'{\"error\":{\"message\":\"您当前请求存在异常，暂时限制本次访问。...\",\"code\":40362}}'",
+        "duration": "约 42s",
+        "early_signal": "status=403 且响应体是 JSON 错误对象（非 HTML 页面）"
+      },
+      {
+        "attempt": "默认 UA 抓某短视频站首页",
+        "failure": "返回 444，body 仅 115 字节：'Access Denied / X-TT-System-Error: 3'",
+        "duration": "约 42s",
+        "early_signal": "status=444、body 115 字节、body_text 51 字符"
+      },
+      {
+        "attempt": "以为『换浏览器 UA』是通用解，对所有站照搬",
+        "failure": "某问答站换 UA 后不再 403，但改成 302 跳 '//<问答站域名>/signin?next=%2F'（撞登录墙）；某代码托管站两 UA 结果完全相同（576,887 vs 576,888 字节、正文均 144,263 字符），UA 根本不影响",
+        "duration": "秒级 ~ 42s",
+        "early_signal": "问答站 status 403→302 且 Location 指向 signin；代码托管站两 UA 长度/正文几乎一致"
+      }
+    ],
+    "solution": "可跑要点：① 抓取前统一显式设置浏览器 UA（Chrome UA + Accept/Accept-Language 头）。② 不要只看 status：同一 200 下比对响应长度 / 正文长度 / 哈希，识别『骨架页 vs 完整页』。③ 换 UA 后仍 302 跳登录或 403 的，说明还需 Cookie/登录态或 headless（本案例问答站）。④ 逐站判断，别假设 UA 万能（代码托管站为反例）。⑤ 遇 403/444 记录后立即停，不改用代理绕过。⑥ 附带：中文页默认编码常被误判为 ISO-8859-1，取文本前要修。",
+    "result": "实测：某搜索站 默认UA 200/2,443B/正文290 vs 浏览器UA 200/29,506B/正文17,626；某问答站 默认UA 403 JSON(214B) vs 浏览器UA 302→signin；某短视频站 默认UA 444(115B) vs 浏览器UA 200(72,914B)；某代码托管站 两 UA 均 200 且正文均 144,263 字符（无差异）。",
+    "retrospective": "UA 是『第一道门』：设了才有资格拿正常页；但设了不等于拿到内容——问答站仍撞登录墙、代码托管站根本不看 UA。判断成功与否要看正文长度/哈希而非 status，且必须逐站验证。",
+    "harness": "Python requests",
     "verified": true,
     "status": "published",
     "contributor_id": "anon-2f183a",

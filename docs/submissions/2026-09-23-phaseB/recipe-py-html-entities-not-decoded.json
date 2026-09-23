@@ -1,0 +1,33 @@
+{
+  "id": "recipe-py-html-entities-not-decoded",
+  "title": "提取文本忘 unescape：&#39;/&amp;/&rarr; 原样入库，手写 replace 链还会因顺序二次解码",
+  "tags": ["selector", "encoding"],
+  "model": "Agent+Python requests",
+  "problem": "抓某公开引用练习站做结构化抽取时，用正则/HTMLParser 取到标签之间的文本后直接入库，结果字段里带着 HTML 实体：同一页出现 &#39; 共 4 次、&rarr; 1 次，正文里的撇号、箭头都以实体形式存进了 JSON。如果为了『省事』手写 replace 链清洗，顺序写错还会把 &amp;lt; 二次解码成 '<'，把数据改坏。",
+  "dead_ends": [
+    {
+      "attempt": "用正则 >([^<>]{3,80})< 直接从响应文本里抠标签间内容，抠到即写库",
+      "failure": "抠出的片段原样带着实体：'“I have not failed. I&#39;ve just found 10,000 ways that won&#39;t work.”'，其中 &#39; ×4、&rarr;(→) ×1 未解码，字段里出现反人类的 &...; 记号",
+      "duration": "约 0.9s（一次请求）+ 抽取调试 4min",
+      "early_signal": "抽出的值里含有 '&' 开头的实体序列（&#39;、&rarr; 等），且中文/符号显示为编码而非字符本身"
+    },
+    {
+      "attempt": "只用 HTMLParser 收集文本节点、剥离 script/style，以为『去掉标签就干净了』",
+      "failure": "标签是去掉了，但实体不是标签，HTMLParser 默认不对数据做实体解码，&#39;、&rarr; 依然原样留在可见文本里",
+      "duration": "约 3min 改解析器",
+      "early_signal": "可见文本里仍出现 &xxx; 序列，说明问题不在标签而在实体"
+    },
+    {
+      "attempt": "手写 replace 链清洗，按『先换 &amp; 再换 &lt;』顺序：s.replace('&amp;','&').replace('&lt;','<')",
+      "failure": "对 '&amp;lt;b&amp;gt;' 这类『被转义的转义』会二次解码成 '<b&gt;'（把本应显示的 '&lt;b&gt;' 变成了真标签），数据被改坏且不可逆；顺序反过来才对",
+      "duration": "约 2min 试错",
+      "early_signal": "同一段文本替换前后语义变了（本该显示的字面量变成了标签/特殊字符），且顺序不同结果不同"
+    }
+  ],
+  "solution": "可跑要点：① 取到文本后统一用标准库 html.unescape(text) 解码实体（&#39; -> '、&rarr; -> →、&amp; -> &），它一次处理命名/十进制/十六进制实体。② 绝不要手写 replace 链清洗实体——顺序敏感，&amp; 必须先于其它处理，否则会把『转义过的转义』二次解码破坏数据。③ 顺序应为：先按选择器/解析器取到文本节点 -> html.unescape() -> 再做 trim/去空白等规整。④ 入库前加校验：值里若仍含 /&[#a-zA-Z0-9]+;/ 模式即判为未解码并修正。⑤ 注意 unescape 之后再 strip 标签是危险的（会把解出来的 '<' 当标签），所以务必先剥标签再 unescape。",
+  "status": "published",
+  "harness": "Python requests",
+  "result": "实测某公开引用练习站：正则抽取的正文片段原样含 &#39;×4、&rarr;×1；html.unescape 后还原为 '“I have not failed. I've just found 10,000 ways that won't work.”'；对照手写替换：对 '&amp;lt;b&amp;gt;'，正确 html.unescape 得 '&lt;b&gt;'，而 naive 先换 &amp; 得 '<b&gt;'（二次解码，错误）。",
+  "retrospective": "实体不是脏字符而是数据的一部分，忘 unescape 会把 ' 存成 &#39;、把 → 存成 &rarr;，下游 JSON 看着非空却全是编过码的假值。最常见的翻车不是『忘了清洗』，而是『手写清洗把顺序写反』——所以清洗实体只认标准库 html.unescape，别自己造轮子。",
+  "verified": true
+}

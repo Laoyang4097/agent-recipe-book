@@ -1,0 +1,39 @@
+{
+  "id": "recipe-py-content-encoding-double-decode",
+  "title": "Content-Encoding 静默解压：requests 已自动解 gzip/deflate，手动再解一次即崩；br 未装库则静默乱码",
+  "tags": ["encoding", "scrape"],
+  "model": "Agent+Python requests",
+  "problem": "抓某公开 HTTP 测试服务返回的压缩响应(标准回显端点，路径如 /gzip、/deflate、/brotli)时，看到响应头 Content-Encoding: gzip，直觉认为『body 是压缩的、得自己解压』，于是对 r.content 调 gzip.decompress()——结果直接抛异常。真相是 requests 在底层已经透明解压，r.content 拿到的就是明文；bro 更隐蔽：响应头声明 Content-Encoding: br，但环境未装 brotli/requests 无法解，r.content 是原始 br 字节、r.text 是乱码，却不报错。",
+  "dead_ends": [
+    {
+      "attempt": "看到 Content-Encoding: gzip 后，对 r.content 调 gzip.decompress(r.content) 手动解压",
+      "failure": "抛 BadGzipFile: Not a gzipped file (b'{\\n') —— 因为 requests 已自动解压，r.content 前 12 字节是明文 b'{\\n  \"gzipped'，根本不是 gzip 魔数",
+      "duration": "约 1.32s（一次请求）+ 调试 3min",
+      "early_signal": "响应头 Content-Encoding 显示 gzip，但 r.content[:12] 是可见明文 b'{\\n  \"gzipped'（不是 0x1f8b 魔数），r.json() 又能直接解析成功"
+    },
+    {
+      "attempt": "对 Content-Encoding: deflate 的响应调 zlib.decompress(r2.content)",
+      "failure": "抛 zlib.error: Error -3 while decompressing data: incorrect header check —— 同样是重复解压，requests 已把 deflate 解掉了",
+      "duration": "约 1.37s（一次请求）",
+      "early_signal": "Content-Encoding=deflate 但 r2.json()['deflated'] 能直接取到，说明内容已是明文"
+    },
+    {
+      "attempt": "发请求时带 Accept-Encoding: br，抓 Content-Encoding: br 的响应，直接取 r.text / r.json()",
+      "failure": "环境未装 brotli，requests 无法解 br：r.content 是 194 字节原始 br 流(前 8 字节 hex=1b1a01009c07b673)，r.text[:60] 是一串 \\x1b\\x1a\\x01\\x00 乱码，r.json() 抛 JSONDecodeError: Expecting value: line 1 column 1 (char 0)。全程没有任何告警，静默产出坏数据",
+      "duration": "约 1.34s（一次请求），定位耗时 5min",
+      "early_signal": "Content-Encoding=br 但响应体不是可读文本；检查 content 头几字节是 1b 1a 开头（br 魔数），而非 { [ < 等明文"
+    },
+    {
+      "attempt": "想强制关闭压缩：请求加 Accept-Encoding: identity，期望服务端回未压缩 body",
+      "failure": "服务端无视该头，仍返回 Content-Encoding: gzip、len=290——证明不能指望用 identity 让服务端别压，压缩控制权在服务端",
+      "duration": "约 1.3s",
+      "early_signal": "请求写了 identity，响应头却仍是 gzip"
+    }
+  ],
+  "solution": "可跑要点：① 默认别手动解压——requests 会自动处理 gzip/deflate，r.content 已是明文，r.json()/r.text 直接用。② 判断是否已解压：看 r.content 开头是不是明文(如 '{'、'<' 而非 0x1f8b/0x1b)，或直接试 r.json()。③ 要用 br 必须先 `pip install brotli`（或 brotlicffi），否则 requests 静默给出原始 br 字节。④ 不要指望 Accept-Encoding: identity 能关掉服务端压缩。⑤ 落库前加哨兵：若 content 里出现 0x1b 1a 等压缩魔数或大比例非文本字节，判定『未解码』并报警，别把乱码当数据。⑥ 若需自行解压（极端场景），先按响应头 Content-Encoding 判断，且只在 r.content 未解压时才解。",
+  "status": "published",
+  "harness": "Python requests",
+  "result": "实测某公开测试服务：/gzip 响应 ce=gzip、len(content)=295、content[:12]=b'{\\n  \"gzipped'，手动 gzip.decompress 抛 BadGzipFile；/deflate 手动 zlib.decompress 抛 error -3；Accept-Encoding: br 抓 /brotli（ce=br、len=194、hex[:8]=1b1a01009c07b673），未装 brotli 时 r.text 为乱码、r.json() 抛 JSONDecodeError；Accept-Encoding: identity 被服务端无视，仍回 ce=gzip。",
+  "retrospective": "『看到 Content-Encoding 就手动解』是把库的自动行为当成没做——requests 早已透明解压，手动再解只会崩或产出坏数据。反过来 br 这种需要额外库的编码，缺失时它又静默不报错，所以真正稳妥的是『先用 r.json()/r.text 试，异常或魔数不对再排查编码』，并给未解码产出入库加哨兵。",
+  "verified": true
+}
