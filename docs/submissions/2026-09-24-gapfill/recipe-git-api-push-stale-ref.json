@@ -26,11 +26,17 @@
       "failure": "fatal: bad object —— 远端 commit 不在本地对象库里，git 无法解析",
       "duration": "10min",
       "early_signal": "本地没有的对象不能当 diff 基准；应改用本地已有的父提交"
+    },
+    {
+      "attempt": "用同一个 API 推送脚本处理「含 git mv（重命名/移动文件）」的提交",
+      "failure": "FileNotFoundError：脚本按变更清单逐个读取本地文件，而被移动/删除的旧路径在本地已不存在，直接抛异常、推送中断",
+      "duration": "5min",
+      "early_signal": "git diff-tree --name-only 给出的是「变更清单」而不是「现存文件清单」——被删除的路径也会出现在里面，读文件前必须先判断存在性"
     }
   ],
-  "solution": "① 用「内容比对」而非「引用计数」判断同步：逐文件对比本地内容与远端 API 返回内容，或对比 tree SHA；② diff 基准改用本地 HEAD~1 等本地存在的提交；③ 网络恢复后在正常网络执行一次 git fetch && git reset --hard origin/main 把指针对齐。",
-  "result": "内容层面确认本地与远端零差异（本地有远端无 = 无、远端有本地无 = 无）；推送脚本改为运行时动态获取远端 SHA 作父提交，不再依赖本地引用。",
-  "retrospective": "git 的本地引用是缓存而非真相。绕过 git 推送时本地状态会失真 —— 判断同步与否要看内容，不要看计数器。",
+  "solution": "① 用「内容比对」而非「引用计数」判断同步：逐文件对比本地内容与远端 API 返回内容，或对比 tree SHA；② diff 基准改用本地 HEAD~1 等本地存在的提交；③ 推送脚本对每个变更路径先判断本地是否存在：存在则上传 blob，不存在则在 tree 中以 \"sha\": null 表示删除；④ 网络恢复后在正常网络执行一次 git fetch && git reset --hard origin/main 把指针对齐。",
+  "result": "内容层面确认本地与远端零差异（本地有远端无 = 无、远端有本地无 = 无）；推送脚本改为运行时动态获取远端 SHA 作父提交、并按存在性区分「上传」与「删除」，含文件移动的提交也能一次推成功。",
+  "retrospective": "git 的本地引用是缓存而非真相。绕过 git 推送时本地状态会失真 —— 判断同步与否要看内容，不要看计数器。同理，git 输出的「变更清单」是变更视角、不是现状视角：含删除/移动时，必须按存在性分支处理，否则脚本会在最不该崩的地方崩（推送中途）。",
   "harness": "WorkBuddy",
   "hardware": {
     "os": "Windows 10 22H2",
