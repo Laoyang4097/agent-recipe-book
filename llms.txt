@@ -4,7 +4,18 @@
 ## 索引
 - recipes/recipe-0002.md: browser-use 自动化卡在登录墙的破局（人过门槛 Agent 接手） — 改成"用户先手动登录，Agent 接管已登录 session"（持久化 brow
 - recipes/recipe-0001.md: 误删 shell 环境变量后快速还原（不重装） — 先取系统级 PATH 回灌当前会话；永久修复写回用户变量；动 PATH 前先备份
+- recipes/recipe-anti-bot-encounter-stop.md: 采集某房产信息站遇 Access denied 人机验证，立即停手不绕过 — 1) 见到 'Access denied / confirm you are a
+- recipes/recipe-backoff-throttle-reachable-host.md: 诊断出代理拦截后，切到可达宿主并对连续请求做退避限速，全部成功且无限流 — 1) 先做控制站点探活（example.com）确认采集通道正常。2) 选可达宿
+- recipes/recipe-headless-vs-headed-spa-antibot.md: 无头抓取SPA首页：渲染壳+轮播窗口≠完整视图，且会被反爬指纹拦截 — 1) 判断目标是否 SPA/强反爬：看是否大量 “X of Y showing”
 - recipes/recipe-managed-python-env-pitfalls.md: 在 WorkBuddy 托管 Python 环境跑依赖脚本的坑（缺包 / 丢 git 身份 / cwd 不持久 / YAML 日期序列化） — ① 建隔离 venv 装依赖：`python -m venv .../envs/
+- recipes/recipe-rate-limit-proxy-misattribution.md: 高频采集公开站全报 fetch failed：误判限流，实为采集代理对部分域名静默拦截 — 1) 在怀疑'限流'前，先对已知可达宿主（如 example.com）做控制请求
+- recipes/recipe-scrape-encoding-gbk-newsportal.md: 抓新闻门户首页标题：GBK编码被工具掩盖，HTML噪声与追踪链接污染列表 — ① 不要'列所有标题'，按频道/容器限定抓取范围（如只取 /china/、/wo
+- recipes/recipe-scrape-infinite-scroll-truncation.md: 无限滚动feed单页抓取只拿到首屏批次，改用分页接口或驱动真实滚动补齐 — 1) 先识别页面是 CSR/无限滚动（看 “load more”、分页游标、In
+- recipes/recipe-scrape-js-render-shell.md: 抓JS动态站列表：静态请求只拿到外壳，命中SSR端点才出正文 — ① 区分'首屏 SSR 是否含列表'：先用 WebFetch 探首页，若拿到骨架
+- recipes/recipe-scrape-pagination-dedup.md: 翻分页列表：用错page参数静默重复首页，offset步长不对边界重叠 — ① 先抓一页并解析真实分页控件：该站用 start= 偏移、页大小 25，规律为
+- recipes/recipe-session-401-public-api-notoken.md: 抓需 token 的公开 API：WebFetch 无法带 Authorization 头，裸请求 401，必须换能设请求头的工具 — ① 识别'公开 API 但需 token/key'这类端点：裸抓必 401，先读
+- recipes/recipe-shadow-dom-iframe-crossorigin-block.md: 抓组件库文档的实时示例与 Web Component 渲染结果：shadow DOM 与跨域 iframe 双双取不到 — ① 先分清'文档站普通 DOM'与'组件运行时渲染的 shadow DOM'：W
+- recipes/recipe-table-html-to-json-export.md: HTML表格转JSON：直接抓表格页丢整表，改抓站点官方CSV/XML导出 — 1) 优先找站点官方机器可读导出（CSV/XML/JSON）：多数数据注册表在页
 
 ## 如何被 Agent 读取
 GET api/experiences.json 获取全量结构化数据；GET llms.txt 获取索引。

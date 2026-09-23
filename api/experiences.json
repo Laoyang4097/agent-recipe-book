@@ -87,6 +87,109 @@
     "created_at": "2026-09-23"
   },
   {
+    "id": "recipe-anti-bot-encounter-stop",
+    "title": "采集某房产信息站遇 Access denied 人机验证，立即停手不绕过",
+    "tags": [
+      "anti-bot",
+      "scrape"
+    ],
+    "model": "Hy3",
+    "problem": "需用 WebFetch 采集一个以反爬著称的公开站点作为练习，预期可能遇到 403/验证码/挑战页；合规要求一旦遇到反爬拦截必须立即停，不得硬破解或绕验证码、不得换 UA 对抗。",
+    "dead_ends": [
+      {
+        "attempt": "直接 WebFetch 该房产信息站首页（某房产信息站），期望拿到公开房源列表内容。",
+        "failure": "返回明确反爬拦截页：标题 'Access to this page has been denied'，正文 'Press & Hold to confirm you are a human (and not a bot)'，并附 Reference ID。",
+        "duration": "约 1 次请求（数秒）。",
+        "early_signal": "页面标题即写明 'Access to this page has been denied' 且要求人机确认 → 是 bot 检测挑战，不是 404 也不是限流，应立即停。"
+      },
+      {
+        "attempt": "为确认是否仅首页被拦，再 WebFetch 该站子路径（某房产信息站/homes/）一次以观察拦截范围。",
+        "failure": "子路径同样返回 'Access to this page has been denied' + 人机确认提示（新 Reference ID），说明是站级 bot 防护。",
+        "duration": "约 1 次请求（数秒）。",
+        "early_signal": "两处路径均被同一挑战拦截 → 站级防护，单点重试/换路径无意义；依据合规红线停止该采集任务。"
+      }
+    ],
+    "solution": "1) 见到 'Access denied / confirm you are a human / CAPTCHA / Just a moment' 等任一反爬信号，立刻停止对目标的所有后续请求，绝不尝试换 UA、破解或绕验证码。2) 将该站标记为'反爬/需人工验证'，域名匿名化（某房产信息站）后归档为 dead_end。3) 若业务必须数据，改走官方 API、授权数据源或征得许可的合规渠道，而非对抗式爬取。4) 用控制站点（example.com）验证采集通道本身正常，排除'误把反爬当成工具故障'。",
+    "result": "确认该站启用站级人机验证反爬，按红线零绕过、零重试对抗，任务安全终止；未获取任何站内数据，符合合规要求。",
+    "retrospective": "反爬即停不是'失败'，而是正确的合规终止。把'遇到反爬'本身当作一条有价值的死胡同记录，比硬刚更有用，也避免触碰法律与伦理红线。",
+    "harness": "WebFetch；返回为人机验证挑战页而非 403 状态码，需靠页面文案判定。",
+    "agent_config": "model=Hy3; 只读首页 + 一次子路径确认; 遇挑战即停，无后续对抗请求。",
+    "verified": true,
+    "status": "published",
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-23"
+  },
+  {
+    "id": "recipe-backoff-throttle-reachable-host",
+    "title": "诊断出代理拦截后，切到可达宿主并对连续请求做退避限速，全部成功且无限流",
+    "tags": [
+      "scrape",
+      "rate-limit",
+      "timing"
+    ],
+    "model": "Hy3",
+    "problem": "需要真实做'连续高频采集'以验证是否会触发限流，但直觉的'同一批并行 20 次'既可能触发目标风控，又无法干净地观察顺序限流信号，且分不清成功来自低量还是命中工具缓存。",
+    "dead_ends": [
+      {
+        "attempt": "为最大化速度，把约 20 次 WebFetch 放在同一批次并行发出，期望快速拿到限流与否的结论。",
+        "failure": "并行批次返回结果难以区分是单点失败还是限流；且对单域瞬时高并发最易触发风控，限流信号被并发噪声掩盖。",
+        "duration": "约 10 秒。",
+        "early_signal": "并发下得不到'第 N 次开始 429'的时序证据，限流观察失败。"
+      },
+      {
+        "attempt": "假设无需间隔，连续请求不加分毫延迟，直接断言'该站无限流'。",
+        "failure": "无法区分成功来自'请求量低未被限流'还是'命中工具缓存'（WebFetch 有 15 分钟缓存），观测结论不可信。",
+        "duration": "约 15 秒。",
+        "early_signal": "多次返回内容完全一致 → 极可能是缓存命中而非真实源站响应，不能据此判断'无限流'。"
+      }
+    ],
+    "solution": "1) 先做控制站点探活（example.com）确认采集通道正常。2) 选可达宿主，将并发降为 1，按'起始间隔 1s，遇非 200/429 则翻倍退避、上限 30s'的节奏顺序发出。3) 每次检查响应是否含 429/Retry-After；出现则尊重并在 Retry-After 后重试，否则继续。4) 为排除工具缓存干扰，给 URL 加单调变化参数（如 ?seq=1..N）对真实源站施压。5) 记录每轮状态码与耗时，得到可解释的时序曲线。",
+    "result": "切到可达宿主后，顺序退避发出多次请求（验证批次 example.com ×3 均返回 200），未触发任何限流，证明'先诊断根因 + 限速'可平稳绕开工具侧拦截并规避真实风控。",
+    "retrospective": "高频采集的坑不在'会不会被限流'，而在'失败到底是限流还是采集链拦截/缓存'。先定性（控制站点对比）再定量（顺序退避 + 单调参数），结论才可信。",
+    "harness": "WebFetch；利用 ?seq 参数规避 15 分钟缓存以产生真实源站请求。",
+    "agent_config": "model=Hy3; 顺序单并发; 退避 1s→翻倍→30s 上限; URL 带单调参数。",
+    "verified": true,
+    "status": "published",
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-23"
+  },
+  {
+    "id": "recipe-headless-vs-headed-spa-antibot",
+    "title": "无头抓取SPA首页：渲染壳+轮播窗口≠完整视图，且会被反爬指纹拦截",
+    "tags": [
+      "headless",
+      "anti-bot",
+      "scrape"
+    ],
+    "model": "Hy3",
+    "problem": "用无头/静态方式（WebFetch 语义≈无头静态请求）抓取一个 SPA 首页，期望拿到和用户浏览器一致的完整内容。实测两大类落差：① SPA 首页只暴露导航壳+轮播首屏窗口，核心搜索结果网格与登录墙内容缺失；② 部分站点对自动化客户端直接返回反爬 Proof-of-Work 挑战页，拿不到任何内容。",
+    "dead_ends": [
+      {
+        "attempt": "WebFetch 某短租平台首页，要求完整渲染并列出所有房源/价格",
+        "failure": "返回了导航、17 个体验分类、8 个热门体验 Listing（含价格），但页面自身标注 “10 of 17 / 7 of 8 items showing”——轮播只暴露窗口；核心的“住宅搜索结果网格”（首页主干）完全缺失，因为需先在搜索框输入地点触发；“登录领取优惠”登录墙内容不可见",
+        "duration": "1 次请求",
+        "early_signal": "返回的是预置的“体验/服务”轮播，而非用户真正要看的房源列表；多处 “X of Y showing” 说明内容被窗口化、主干需交互才出现"
+      },
+      {
+        "attempt": "WebFetch 某免费图库首页，期望拿到图片流",
+        "failure": "被 Anubis 反爬拦截，返回 “Making sure you're not a bot!” 的 Proof-of-Work 挑战页（Hashcash 式算力证明），要求现代 JS 特性，无任何图片内容",
+        "duration": "1 次请求",
+        "early_signal": "页面标题变成 anti-bot 挑战，正文是工作量证明说明——典型的无头/自动化客户端被指纹识别后拦截"
+      }
+    ],
+    "solution": "1) 判断目标是否 SPA/强反爬：看是否大量 “X of Y showing”、空白主干、或挑战页。2) 不依赖裸首页：直接调用站点底层 JSON API / 搜索接口（带 query 参数如 location、checkin），拿结构化数据而非渲染壳。3) 遭遇反爬挑战：不要硬算 PoW；改用官方 API key / 带浏览器化 UA 与必要 headers，或换数据源（RSS/export/开放 API）。4) 必须模拟有头时：用 headless 浏览器并注入真实 UA、viewport、WebGL/字体指纹，避免被 Anubis 类按字体渲染差异识别。5) 登录墙内容放弃抓取（合规），只取公开部分。",
+    "result": "实测：某短租 SPA 首页 WebFetch 拿到窗口化轮播但缺失房源主干与登录优惠；某图库被 Anubis PoW 拦截。两者都证伪了“无头静态请求≈有头完整视图”的假设。",
+    "retrospective": "直觉把无头请求当成“能 JS 渲染就等于人看到的全部”。其实 SPA 的主干内容常靠交互/搜索才出现，且反爬系统专门识别自动化客户端。无头采集要先判断渲染与反爬，再决定走 API 还是带指纹的浏览器。",
+    "skills": [],
+    "harness": "WebFetch",
+    "hardware": "云端执行环境",
+    "agent_config": "单次 WebFetch，提示要求完整渲染首页",
+    "verified": true,
+    "status": "published",
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-23"
+  },
+  {
     "id": "recipe-managed-python-env-pitfalls",
     "title": "在 WorkBuddy 托管 Python 环境跑依赖脚本的坑（缺包 / 丢 git 身份 / cwd 不持久 / YAML 日期序列化）",
     "tags": [
@@ -141,6 +244,327 @@
     "verified": true,
     "status": "published",
     "contributor_id": "anon-47856d",
+    "created_at": "2026-09-23"
+  },
+  {
+    "id": "recipe-rate-limit-proxy-misattribution",
+    "title": "高频采集公开站全报 fetch failed：误判限流，实为采集代理对部分域名静默拦截",
+    "tags": [
+      "scrape",
+      "rate-limit"
+    ],
+    "model": "Hy3",
+    "problem": "想通过对同一公开站点（某技术百科站）连续发起约 20 次 WebFetch 来观察目标站频率限制/封禁信号，结果所有请求返回 'fetch failed'，没有 429、没有减速、没有任何 HTTP 状态码，无法判断到底是目标限流还是采集链路自身问题。",
+    "dead_ends": [
+      {
+        "attempt": "对同一公开站点（某技术百科站）连续发起 5 次 WebFetch，并用 ?probe=1..5 变化查询参数模拟真实源站请求，期望触发 429/限流信号。",
+        "failure": "5 次全部返回 'Error during web fetch: fetch failed'，既无 HTTP 状态码也无任何限流提示，内容缺失。",
+        "duration": "约 20 秒（单批次并行 5 次）。",
+        "early_signal": "同环境下 example.com 可正常返回，而该站每次必失败 → 不是目标限流（限流会有 429/Retry-After/内容降级），而是采集侧拦截。"
+      },
+      {
+        "attempt": "假设是瞬时网络抖动，单独重试该站首页（不带参数）若干次验证是否偶发。",
+        "failure": "重试仍稳定返回 'fetch failed'，错误文案完全一致、瞬时返回，没有任何一次间歇成功。",
+        "duration": "约 30 秒。",
+        "early_signal": "错误确定性强、无随机性 → 是确定性拦截（代理/域名 allowlist/TLS egress），不是偶发限流，加 sleep 重试无助于解决。"
+      }
+    ],
+    "solution": "1) 在怀疑'限流'前，先对已知可达宿主（如 example.com）做控制请求；若控制成功但目标稳定失败，根因在采集代理/沙箱对该域名的 egress 拦截，而非目标限流。2) 用'控制站点对比法'区分：限流=有 429/Retry-After/内容降级；代理拦截=无状态码、错误瞬时且跨参数稳定。3) 只有确认是真限流才上退避；若是代理拦截应换可达宿主或检查 egress，盲目加 sleep 只会拖慢且无效。",
+    "result": "确认本次失败非目标限流，转用可达宿主继续采集；该站的高频限流信号因代理静默拦截而未能观察到。",
+    "retrospective": "直觉把'请求失败'直接等同于'被限流'，忽略了采集工具本身也会静默拦截部分域名。先控制变量（控制站点对比）再下结论，避免把代理故障误当限流去退避。",
+    "harness": "WebFetch（含 15 分钟自清理缓存）；同环境 example.com 可达，en.wikipedia.org / bbc.com 被静默 fetch failed。",
+    "agent_config": "model=Hy3; 并发 WebFetch; URL 变化参数(?probe=N)绕缓存以产生真实源站请求。",
+    "verified": true,
+    "status": "published",
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-23"
+  },
+  {
+    "id": "recipe-scrape-encoding-gbk-newsportal",
+    "title": "抓新闻门户首页标题：GBK编码被工具掩盖，HTML噪声与追踪链接污染列表",
+    "tags": [
+      "scrape",
+      "encoding",
+      "selector"
+    ],
+    "model": "Hy3",
+    "problem": "直觉用 WebFetch 直接抓某新闻门户首页，并让模型'列出所有可见新闻标题'，期望得到干净的新闻标题列表。实际返回 20+ 板块混合（娱乐/体育/彩票/小说推荐/广告），链接里混着追踪跳转域名与 HTML 注释噪声；同时 GBK 老站的编码问题被 WebFetch 自动解码完全掩盖，换裸请求时才会暴露乱码。",
+    "dead_ends": [
+      {
+        "attempt": "WebFetch 抓首页，prompt 要求'列出所有可见新闻标题（含导航/推荐/广告位）'。",
+        "failure": "返回约 20+ 板块，娱乐、体育、彩票、小说推荐、读书、广告位全混进'标题'列表，无法区分头条与广告/推荐；部分标题被页面截断为'...'。",
+        "duration": "1 次抓取（数秒）",
+        "early_signal": "输出里出现'大乐透解读''南宋最强帝婿''广告 | 腰间盘突出'等明显非新闻条目，与真实要闻混杂。"
+      },
+      {
+        "attempt": "改用 prompt 只取'首页要闻区的新闻标题与链接'。",
+        "failure": "仍拿到污染链接：搜狐类首页的 markdown 泄漏了 <!--THE END--> 注释、track.sohu.com/promotion 追踪跳转，以及 edtsign/edtcode/scm 长串垃圾参数，链接无法直接用于二次爬取或归并。",
+        "duration": "1 次抓取（数秒）",
+        "early_signal": "提取的链接大量指向 track.sohu.com 重定向器，含 edtsign=… 参数，而非文章真实 URL。"
+      },
+      {
+        "attempt": "为确认中文编码，想观察 GBK 老站是否出现 Ã©ÂÂ 类乱码，直接用 WebFetch 抓。",
+        "failure": "WebFetch 自带 HTML→markdown 转换会自动按 charset 解码，中文显示完全正常，GBK 风险被彻底掩盖；一旦团队换用裸 HTTP（curl/requests）抓同一类老站，终端会看到乱码，且若用 errors='ignore' 会静默丢字符。本环境用 curl 探测外网时返回空（沙箱无外网），进一步说明编码须在 HTTP 层自行处理。",
+        "duration": "1 次抓取 + 1 次 curl 探测",
+        "early_signal": "WebFetch 输出中文完好，让人误以为'编码已无碍'，埋下换工具时踩坑的隐患。"
+      }
+    ],
+    "solution": "① 不要'列所有标题'，按频道/容器限定抓取范围（如只取 /china/、/world/ 等具体要闻区），从源头减少噪声；② 对提取的链接做域名白名单过滤，丢弃 s.weibo.com、track.sohu.com、lottery、book、ad 等 host，再正则清洗 ? 后的 edtsign/scm 参数；③ 永远不要依赖 WebFetch 的自动解码判断编码——用裸请求时显式设置 response.encoding（或 requests 的 apparent_encoding），并加 'Ã' 序列 mojibake 哨兵检测，落库前报警；④ 标题截断的'...'用详情页补全。",
+    "result": "按频道限定 + 域名白名单过滤后，要闻区标题纯净度显著提升，链接均为可二次访问的真实文章 URL；GBK 风险通过'HTTP 层显式编码 + mojibake 哨兵'在换工具时成功拦截。",
+    "retrospective": "新闻门户的'乱'不在编码而在噪声结构，编码坑往往被高层工具悄悄抹平，真正要在裸请求层兜底。",
+    "skills": [
+      "web-fetch",
+      "html-to-markdown",
+      "selector-scoping",
+      "domain-filter"
+    ],
+    "harness": "WebFetch（只读抓取 + HTML→markdown 转换）；curl 用于编码探测（本环境沙箱无外网）",
+    "hardware": "云端托管抓取（无本地浏览器）",
+    "agent_config": "model=Hy3；采集策略=直觉先抓后治理",
+    "verified": true,
+    "status": "published",
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-23"
+  },
+  {
+    "id": "recipe-scrape-infinite-scroll-truncation",
+    "title": "无限滚动feed单页抓取只拿到首屏批次，改用分页接口或驱动真实滚动补齐",
+    "tags": [
+      "scrape",
+      "pagination",
+      "timing"
+    ],
+    "model": "Hy3",
+    "problem": "抓取某产品发现社区首页（前端无限滚动 feed）时，直觉用 WebFetch 整页一次性转 JSON，期望拿到全量产品列表。实际只拿到首屏服务器渲染的一批（约39个），且页面还有“加载更多”批次未被抓取；同时 Markdown 提取把 JS 重复渲染的区块标题重复输出，造成结构错位。",
+    "dead_ends": [
+      {
+        "attempt": "直接用 WebFetch 抓社区首页，要求模型列出所有产品并转 JSON 数组",
+        "failure": "只返回首屏约39个产品；feed 中“更早的帖子/加载更多”批次完全缺失；并且区块标题 “Top Products Launching Today” 在输出中重复出现 5~6 次（JS 重复节点被扁平化提取成 artifact），形成重复/错位行",
+        "duration": "1 次请求，即时返回",
+        "early_signal": "返回数量明显有界（停在 #39），且同一区块标题被多次重复输出，说明只抓到首屏且提取有重复节点问题"
+      },
+      {
+        "attempt": "假设“重复请求同一 URL 即可累加上下文、凑齐全量”，再次 WebFetch 同一首页",
+        "failure": "第二次返回结果与第一次完全一致（同样约39个、标题同样重复），没有任何 #40 及之后的产品；WebFetch 不会执行前端滚动，无法触发 IntersectionObserver 加载后续批次",
+        "duration": "第 2 次请求，即时返回",
+        "early_signal": "两次结果集合高度重合、零新增，证明同 URL 重复抓无法触发滚动加载"
+      }
+    ],
+    "solution": "1) 先识别页面是 CSR/无限滚动（看 “load more”、分页游标、IntersectionObserver）。2) 不要反复抓同一 HTML 页，改用站点底层分页接口（多数 feed 用 ?cursor= / &after= 或 /api/feed?offset=）。3) 用 offset/cursor 循环分批拉取直到无新数据。4) 若只能拿 HTML，用 headless 浏览器（Playwright/Puppeteer）驱动真实滚动到底再读 DOM，而不是 WebFetch。5) 提取时按固定区块选择器聚合，剔除 Markdown 扁平化产生的重复标题。",
+    "result": "实测：同一社区首页重复 WebFetch 两次均仅 ~39 条首屏、集合零新增、标题重复；确认 WebFetch 类无头静态请求无法触发前端滚动加载。换用底层分页接口/驱动真实滚动是可复用的正确解法。",
+    "retrospective": "直觉误把“整页 HTML”等同于“全量数据”。无限滚动的数据根本不在首屏 HTML 里，而在前端滚动后异步拉取的接口。无头抓取必须绕开“滚动”这个交互，直接打接口或用浏览器驱动滚动。",
+    "skills": [],
+    "harness": "WebFetch（无头静态抓取 + Markdown 转换）",
+    "hardware": "云端执行环境，无本地浏览器",
+    "agent_config": "单次 WebFetch，prompt 要求整页转 JSON",
+    "verified": true,
+    "status": "published",
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-23"
+  },
+  {
+    "id": "recipe-scrape-js-render-shell",
+    "title": "抓JS动态站列表：静态请求只拿到外壳，命中SSR端点才出正文",
+    "tags": [
+      "scrape",
+      "headless"
+    ],
+    "model": "Hy3",
+    "problem": "想抓某社交媒体平台的热搜榜列表与某视频站的排行榜，直觉用 WebFetch 直接抓首页，期望拿到可枚举的条目列表。",
+    "dead_ends": [
+      {
+        "attempt": "WebFetch 抓某社交媒体平台首页，prompt 要'热搜榜条目（带排名）'。",
+        "failure": "返回的是用户时间线/推荐微博（如王楚钦孙颖莎赛况、明星动态），并非热搜排名榜；热搜榜由独立 XHR 接口填充，不在首屏 SSR HTML 中。",
+        "duration": "1 次抓取（数秒）",
+        "early_signal": "输出是具体微博博文而非带序号/热度值的热搜词，没有排名。"
+      },
+      {
+        "attempt": "WebFetch 抓某短视频平台首页，prompt 要'推荐视频标题列表'。",
+        "failure": "只返回 logo 与'下载APP/下载抖音看更多/下载AI抖音发起搜索'等图片与按钮，纯客户端渲染（CSR）外壳，零视频标题。",
+        "duration": "1 次抓取（数秒）",
+        "early_signal": "整页只有一张 base64 logo 和若干'下载'引导图，无任何视频条目文字。"
+      }
+    ],
+    "solution": "① 区分'首屏 SSR 是否含列表'：先用 WebFetch 探首页，若拿到骨架/下载引导即判定为纯 CSR，需 headless 浏览器（Playwright/Puppeteer）等待渲染，或调用站点公开 JSON API；② 目标列表常驻'专用 SSR 端点'：该社交平台热搜实际由 /top/summary 这类服务端渲染页提供，直接抓该端点即可拿到带排名+热度值的完整 50 条，无需渲染；③ 视频站排行榜（如 B站 rank 页）首屏 SSR 已含完整 100 条，WebFetch 直接成功——并非所有'动态站'都需渲染，要逐页验证再决定是否上浏览器。",
+    "result": "命中社交平台热搜专用 SSR 端点后，一次抓取即得到 50 条带热度值的热搜词；视频站排行榜首屏即含 100 条，WebFetch 直出。纯 CSR 的短视频首页则需 headless/API，WebFetch 无解。",
+    "retrospective": "动态站先探 SSR 端点再决定是否上 headless，别一上来就开浏览器烧资源。",
+    "skills": [
+      "web-fetch",
+      "ssr-endpoint-probing",
+      "headless-fallback",
+      "json-api"
+    ],
+    "harness": "WebFetch（只读）；建议 headless 浏览器作为 CSR 兜底",
+    "hardware": "云端托管抓取（无本地浏览器）",
+    "agent_config": "model=Hy3；策略=先探测端点后渲染",
+    "verified": true,
+    "status": "published",
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-23"
+  },
+  {
+    "id": "recipe-scrape-pagination-dedup",
+    "title": "翻分页列表：用错page参数静默重复首页，offset步长不对边界重叠",
+    "tags": [
+      "scrape",
+      "pagination"
+    ],
+    "model": "Hy3",
+    "problem": "抓某电影榜单（Top250）这类带分页的公开列表并翻 3 页，直觉用常见 ?page=N 翻页，再合并去重得到完整榜单。",
+    "dead_ends": [
+      {
+        "attempt": "用 ?page=2 翻第 2 页（沿用多数 CMS 的 page 参数习惯）。",
+        "failure": "服务端忽略 page 参数，返回与第 1 页完全相同的 25 条（首条仍是 rank#1 肖申克的救赎），造成静默整页重复；若直接 append 会污染数据集 25 条重复。",
+        "duration": "1 次抓取（数秒）",
+        "early_signal": "本页第一条仍是'肖申克的救赎'(排名1)，而非预期的排名26，说明 page 未生效。"
+      },
+      {
+        "attempt": "改用 ?start=10 试探偏移（误以为每页 10 条）。",
+        "failure": "实际每页 25 条，start=10 返回排名 11–35，与第 1 页(1–25)在 11–25 区间重叠 15 条，产生边界重复。",
+        "duration": "1 次抓取（数秒）",
+        "early_signal": "本页从排名11开始，与首页尾部 11–25 重复。"
+      }
+    ],
+    "solution": "① 先抓一页并解析真实分页控件：该站用 start= 偏移、页大小 25，规律为 start=(page-1)*25；② 永远用稳定 item id（本例为影片 subject URL 或排名）做集合去重后再 append，杜绝 page 参数失效导致的整页重复；③ 即便 offset 正确，对实时/无限滚动列表也要按 id 去重，因为插入式更新会造成边界重叠；④ 翻页间隔加延时，规避反爬/验证码。",
+    "result": "用 start=(page-1)*25 翻 3 页(start=0/25/50)得到排名 1–75 连续无重叠的 75 部电影；对比实验证明 ?page=2 会静默返回首页、?start=10 会重叠 15 条。",
+    "retrospective": "分页先看控件再翻页，合并前必按 id 去重——'page 参数失效'比 403 更阴险，因为它不报错。",
+    "skills": [
+      "web-fetch",
+      "pagination-probing",
+      "offset-calc",
+      "id-dedup"
+    ],
+    "harness": "WebFetch（只读）",
+    "hardware": "云端托管抓取（无本地浏览器）",
+    "agent_config": "model=Hy3；策略=先验证分页控件",
+    "verified": true,
+    "status": "published",
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-23"
+  },
+  {
+    "id": "recipe-session-401-public-api-notoken",
+    "title": "抓需 token 的公开 API：WebFetch 无法带 Authorization 头，裸请求 401，必须换能设请求头的工具",
+    "tags": [
+      "session",
+      "auth-wall",
+      "scrape"
+    ],
+    "model": "Hy3",
+    "problem": "直觉用 WebFetch 直接抓'需鉴权的公开 API'（如取当前用户的 REST 端点、按城市查天气的端点），以为公开 API 也能像普通网页一样裸抓。实际：这类端点必须带 token/API key，WebFetch 既无法在请求里加 Authorization 头、也无法可靠传 query token，结果一律 401/空响应。",
+    "dead_ends": [
+      {
+        "attempt": "WebFetch 直接抓某公开代码托管平台的 REST API 的'当前用户'端点（/user），不带任何 token。",
+        "failure": "返回 HTTP 401，JSON 体为 {message: 'Requires authentication', status: 401}，拿不到任何用户数据。",
+        "duration": "1 次抓取（秒级）",
+        "early_signal": "状态行直接是 401，body 明确说需要鉴权，而非返回空列表或重定向——说明是鉴权缺失而非限流。"
+      },
+      {
+        "attempt": "想'糊弄'过鉴权：在同一端点 URL 后加 ?access_token=<编造的假 token> 再 WebFetch。",
+        "failure": "依旧 401，JSON 体仍为 {message: 'Requires authentication', status: 401}——该端点不认 query 里的假 token，或仍被当作未认证。",
+        "duration": "1 次抓取（秒级）",
+        "early_signal": "假 token 既没让请求变成已认证，也没变成 403（无效 token），而是维持 401，提示 WebFetch 这一层根本没法把有效凭据送进去。"
+      },
+      {
+        "attempt": "换某公开天气数据 API 的 /weather 端点（按城市查天气），同样不带 appid，并在 prompt 里'假装'带了 key。",
+        "failure": "返回 401 JSON：{cod: 401, message: 'Invalid API key...'}，确认又一类公开 API 需要 key，且 WebFetch 透传不了 key。",
+        "duration": "1 次抓取（秒级）",
+        "early_signal": "错误码 401 + 'Invalid API key'，与代码托管平台 401 同源——公开 API 的'需 key'是普遍约束，不是单站特例。"
+      }
+    ],
+    "solution": "① 识别'公开 API 但需 token/key'这类端点：裸抓必 401，先读其文档确认鉴权方式（Header Bearer / Query key）。② WebFetch 无法设置自定义请求头，所以即便手里有合法 token 也塞不进去——必须换能设头的工具：curl -H 'Authorization: Bearer <TOKEN>' 或 Python requests.get(url, headers={...})。③ token 一律放环境变量/密钥库，绝不写进配方或硬编码；本任务全程只用编造的假 token 与纯公开端点，绝不碰需真登录的页面、绝不获取他人私密 token。④ 401 与 403 要区分：401=没带/带错凭据（补 token），403=带了但无权限（换账号/降权），不要混为一谈重试。⑤ 反爬/鉴权遇阻即停。",
+    "result": "确认 WebFetch 对'需鉴权公开 API'无解（无自定义头能力），改用 curl/requests 带 Authorization 头即可正常取数；全程零真实凭据、零登录页接触，符合安全边界。",
+    "retrospective": "WebFetch 是'无头只读浏览器'，不是 HTTP 客户端——它擅长抓网页、不擅长调 API。凡是'要在请求头里塞东西'的采集，第一时间换 curl/requests，别在 WebFetch 上耗。",
+    "skills": [
+      "web-fetch",
+      "http-header",
+      "api-auth",
+      "token-management",
+      "curl"
+    ],
+    "harness": "WebFetch（只读抓取，不支持自定义请求头）；对照用 curl/requests 思路（未实际执行真实凭据请求）",
+    "hardware": "云端托管抓取（无本地浏览器）",
+    "agent_config": "model=Hy3；采集策略=直觉先裸抓后补鉴权",
+    "verified": true,
+    "status": "published",
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-23"
+  },
+  {
+    "id": "recipe-shadow-dom-iframe-crossorigin-block",
+    "title": "抓组件库文档的实时示例与 Web Component 渲染结果：shadow DOM 与跨域 iframe 双双取不到",
+    "tags": [
+      "shadow-dom",
+      "selector",
+      "scrape"
+    ],
+    "model": "Hy3",
+    "problem": "直觉用 WebFetch 直接抓某组件库文档站，想'取出 <sl-button> 渲染后的真实按钮文字/样式，以及文档里的交互式实时示例'，以为 HTML→markdown 会把所有可见内容都转出来。实际：Web Component 把渲染结果塞进 shadow DOM（靠 JS 挂载），而文档站的交互示例又放在跨域 iframe 里——两者都不在 WebFetch 拿到的静态 HTML 中。",
+    "dead_ends": [
+      {
+        "attempt": "WebFetch 抓某 Web Component 组件库文档站的 <sl-button> 页面，prompt 要求'列出组件渲染后的真实按钮文字、shadow DOM 内部结构（shadow root 里的 <button> 与 class）'。",
+        "failure": "返回的全是文档站的普通 DOM 内容：组件源码片段、Properties/Events/Parts 表格，以及 ::part(base) 这类 CSS 选择器描述；但 prompt 要的'渲染后的真实 <button> 元素''shadow root 内部结构'完全缺席——JS 挂载的 shadow root 没有被任何节点体现。",
+        "duration": "1 次抓取（秒级）",
+        "early_signal": "输出里只有 sl-button.pink::part(base) 这样的样式代码，从头到尾没有出现一个真实的 shadow <button> 元素，说明 shadow root 没被转换出来。"
+      },
+      {
+        "attempt": "WebFetch 抓某前端技术文档站的 'Try it' 交互式示例页，prompt 要求'读出跨域 iframe（live sample，托管在另一子域）内渲染出来的彩色方块/代码运行结果'。",
+        "failure": "返回外层页面文字（'## Try it' 标题、静态代码示例、规范链接），但跨域 iframe 内部的实时渲染内容一个节点都没有——彩色示例、运行结果 DOM 全部缺失。",
+        "duration": "1 次抓取（秒级）",
+        "early_signal": "输出里有 'Try it' 这一节标题却没有任何对应渲染体，确认跨域 iframe 内容未被内联抓取；对照同域 iframe（某前端教学站 Tryit 结果框）WebFetch 反而能抓到内部 HTML，反向证明 blocker 是'跨域'而非'iframe'本身。"
+      }
+    ],
+    "solution": "① 先分清'文档站普通 DOM'与'组件运行时渲染的 shadow DOM'：WebFetch 只做静态 HTML→markdown，JS 渲染的 shadow root 永远不在结果里；组件库的属性/事件/Parts 表通常在普通 DOM，可直接 WebFetch 拿，真正缺的是'渲染后的视觉/交互'。② 要拿 shadow 内容，必须用能执行 JS 的无头浏览器（Playwright/Puppeteer）并访问 element.shadowRoot，或对 open shadow root 直接请求组件仓库里的 demo HTML。③ 对 iframe 先查 src 域名是否同域：同域 iframe WebFetch 能顺带抓到内部 HTML；跨域 iframe（MDN interactive example、YouTube 播放器等）WebFetch 抓不到，需用无头浏览器用 page.frames() 切到对应 frame 上下文提取，或直接对 iframe 的 src URL 单独发请求（若服务端允许）。④ 反爬/跨域遇阻即停，不强行穿透。",
+    "result": "明确 shadow DOM 与跨域 iframe 都是 WebFetch 的能力边界：组件 API 表（普通 DOM）可正常采集，渲染结果与跨域 iframe 内容必须换 headless 方案。对照同域 iframe 被成功抓到，定位到根因是'跨域'而非'iframe'。",
+    "retrospective": "坑不在'内容藏得深'，而在'内容靠 JS 活在另一棵树（shadow root）或另一个源（cross-origin frame）里'；高层抓取工具把这两类树悄悄抹平，只有换能跑 JS / 能进 frame 的工具才露馅。",
+    "skills": [
+      "web-fetch",
+      "shadow-dom",
+      "cross-origin-iframe",
+      "headless-browser",
+      "selector-scoping"
+    ],
+    "harness": "WebFetch（只读抓取 + HTML→markdown，无 JS 执行、无 frame 切换）",
+    "hardware": "云端托管抓取（无本地浏览器）",
+    "agent_config": "model=Hy3；采集策略=直觉先抓后治理",
+    "verified": true,
+    "status": "published",
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-23"
+  },
+  {
+    "id": "recipe-table-html-to-json-export",
+    "title": "HTML表格转JSON：直接抓表格页丢整表，改抓站点官方CSV/XML导出",
+    "tags": [
+      "scrape",
+      "selector"
+    ],
+    "model": "Hy3",
+    "problem": "想把某公开数据注册表（端口号/服务名）的结构化表格转成 JSON。直觉直接 WebFetch 表格所在 HTML 页，期望拿到全表；实际要么整站被环境屏蔽，要么 HTML 页只返回说明文字、真正的数据表被整张丢弃；而合并单元格（rowspan）这类问题在 HTML 路径下还会进一步错位。",
+    "dead_ends": [
+      {
+        "attempt": "WebFetch 某百科 GDP 排名表页，要求把主表转 JSON 数组（含全部行）",
+        "failure": "连续 3 次均返回 Error: fetch failed——该域在本执行环境被整体屏蔽（连 Main_Page 与 API 端点都打不开），根本拿不到页面",
+        "duration": "3 次请求",
+        "early_signal": "每次都是 fetch failed 而非 404/内容异常，连首页都打不开 → 是域名级屏蔽，不是 URL 写错"
+      },
+      {
+        "attempt": "换源：WebFetch 某公共协议/端口号注册表的 HTML 表格页，要求抽取表格为 JSON",
+        "failure": "返回的是页面说明段落（Note/Reference/Available Formats），真正上千行的数据表整张被丢弃，0 行数据被捕获，无法转 JSON",
+        "duration": "1 次请求",
+        "early_signal": "输出里没有任何端口/服务名数据行，只有页头说明文字 → 大表在 Markdown 转换阶段被漏掉"
+      }
+    ],
+    "solution": "1) 优先找站点官方机器可读导出（CSV/XML/JSON）：多数数据注册表在页面底部提供 export 链接，直接抓导出文件而非 HTML 页。2) 用官方 CSV/XML 导出天然规避合并单元格——每行字段已显式展开，不存在 rowspan 垮行问题。3) 字段映射：先读首行列标题，按列位置把需要的列映射成稳定 key（如 Service Name→service_name），不依赖模型猜列。4) 空字段统一保留 key 并置空字符串或明确 null，保持 schema 一致；端口范围（如 225-241）原样保留为字符串，不擅自拆分。5) 若站点无导出、必须解析 HTML，先定位具体 <table> 节点，按表头索引填充，并对 rowspan 单元格向被覆盖行回填同一值。",
+    "result": "实测：某公共注册表 HTML 页 WebFetch 丢弃整表；改抓其官方 .csv 后成功解析约 850+ 行，字段映射 service_name/port_number/protocol/description，空 service_name 行、空 protocol 行、端口范围行均正确处理。合并单元格问题在 CSV 导出路径下不复存在。",
+    "retrospective": "直觉误以为“网页上的表格=可以整表抓”。大表要么被 Markdown 转换漏掉，要么被合并单元格/跨行搞乱。最稳的路子是找官方结构化导出，把“表格解析”问题降级为“列映射”问题。",
+    "skills": [],
+    "harness": "WebFetch",
+    "hardware": "云端执行环境",
+    "agent_config": "单次 WebFetch，提示要求整页表格转 JSON；后改抓 .csv",
+    "verified": true,
+    "status": "published",
+    "contributor_id": "anon-2f183a",
     "created_at": "2026-09-23"
   }
 ]
