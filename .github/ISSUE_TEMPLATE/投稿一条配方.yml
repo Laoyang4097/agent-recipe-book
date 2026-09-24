@@ -1,0 +1,136 @@
+name: 投一个我踩过的坑
+description: 用大白话描述一次踩坑，我们把它整理成配方入库
+title: "[配方] "
+labels: ["投稿", "待整理"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        谢谢你来投稿。这里**不需要你懂代码**，也不用你会用 git。
+
+        你只需要把那次"卡住了、绕远了、最后怎么过来的"用大白话说一遍。
+        下面每一项的写法都给你了例子，照着填空就行。
+
+        ---
+
+        **投稿之前请先看一眼这个红线**：本库只收**真实踩过**的坑。
+        别人没遇到过的、听说的、推测的、为了凑数编的，一律不收——
+        我们宁可少收，也不收假货。编造的配方一旦被判出来，会拉黑投稿者。
+
+        **还有一条**：请先别把真实的域名、API Key、内网路径、本机绝对路径写进来。
+        写"$ 目标站点" "$ 我的 key" 这类占位就行，我们入库前会再洗一遍。
+
+  - type: input
+    id: title
+    attributes:
+      label: 一句话说清你解决了什么
+      description: 就是这条配方将来被人搜的时候会搜的那句话。30 个字以内最好。
+      placeholder: 用 XX 破反爬：降频 + 随机头 + 住宅代理
+    validations:
+      required: true
+      max_length: 80
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 你当时卡在哪
+      description: 30 秒能让外人看懂的卡点描述。环境、约束、你本来想干什么。
+      placeholder: 用 AI 写爬虫抓 XX 站点，跑到第 20 分钟开始返回 403，换 IP 也撑不过一分钟。
+    validations:
+      required: true
+
+  - type: textarea
+    id: dead_ends
+    attributes:
+      label: 你走过的死胡同
+      description: |
+        这是整份配方里最有价值的部分，比解法还值钱。至少写一条，
+        多条之间照抄例子里的 `---` 隔开。每条必须以 `### ` 开头，下面三段
+        （**失败现象** / **耗了多久** / **提前信号**）缺一段都会被打回来补——
+        没有「提前信号」的经验是不完整的，我们靠它防下一个人重走。
+
+        ### 我试过 A 方案
+        **失败现象**：你看到了什么（原样贴报错或描述，不要美化）
+        **耗了多久**：比如 40 分钟 / 一下午
+        **提前信号**：事后回头看，其实早就该发现不对的那个现象
+
+        一条例子：
+        ### 直接加大并发
+        **失败现象**：403，IP 两分钟就被封
+        **耗了多久**：20 分钟
+        **提前信号**：第一次抓回来 200 但内容为空，我没当回事
+      placeholder: |
+        ### 直接加大并发
+        **失败现象**：403，IP 两分钟就被封
+        **耗了多久**：20 分钟
+        **提前信号**：第一次抓回来 200 但内容为空，我没当回事
+        ---
+        ### 换随机 UA
+        **失败现象**：过了十分钟又开始 403
+        **耗了多久**：一小时
+        **提前信号**：日志里 fingerprint 字段一直是同一组值
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: 最后怎么破的
+      description: 步骤要具体到别人照着能做出来，别只写结论。
+      placeholder: 把并发降到 1 req / 2 秒，UA 从固定值改成每次随机，代理换成住宅 IP，两周没再封。
+    validations:
+      required: true
+
+  - type: input
+    id: tags
+    attributes:
+      label: 标签
+      description: |
+        从下面挑一到三个，全小写，多个用逗号隔开。不确定就写 scrape。
+        scrape 采集 / anti-bot 反爬 / timing 等待时序 / encoding 编码乱码 /
+        session 登录态 / headless 无头浏览器 / selector 选择器解析 /
+        shadow-dom 影子DOM / pagination 翻页 / rate-limit 限流封禁 /
+        auth-wall 登录墙 / project-judgment 项目判断 / verify-before-claim 引用核查
+      placeholder: anti-bot, rate-limit
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: 当时用的模型或工具
+      description: 主模型就行，一个。
+      placeholder: Hy3
+    validations:
+      required: true
+
+  - type: input
+    id: duration
+    attributes:
+      label: 整个坑耗了多久
+      description: |
+        可选。填得出来就填，填不出就留空，不强求。
+        配方表里没有单独记总耗时的位置，填了会被附到「你当时卡在哪」那一栏末尾，
+        不会被丢掉。
+      placeholder: 一下午
+
+  - type: textarea
+    id: result
+    attributes:
+      label: 实测出来的结论
+      description: |
+        可选，但有的话价值很高。用数字说话的那种。
+      placeholder: 连续跑两小时未封，成功率 100%；对比之前两分钟就挂。
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+
+        **投完之后会发生什么**（不做也会被扣留，别慌）：
+
+        1. 我们收到后会跑一遍机器体检，字段不全的会回来找你补；
+        2. 过检的会先进"待整理池"，由维护者整理成标准配方的样子；
+        3. 入库前会再洗一遍敏感信息，然后在网站上公开。
+
+        一般来说一个工作日内会有回音。被拒的不算失败——**假坑本来就不该收**。

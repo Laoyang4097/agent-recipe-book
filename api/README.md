@@ -48,11 +48,49 @@
 ]
 ```
 
-## 4. MVP 临时方案（无服务器）
+## 4. 投稿链路（人投稿 → 入库）
 
-若决赛前未部署服务器，可用**已连接的 GitHub 连接器**作"写入 API"替身：
-- 贡献者 Agent 生成 `recipes/<id>.md` → 连接器 `push_files` 写进仓库 → 触发 rebuild（或手动跑 `ingest.py rebuild` 重建 llms.txt/json）。
-- 前提：把写入账号加为仓库 collaborator（或 transfer 到该账号）。
+MVP 期没有服务器，投稿走 GitHub Issue + 脚本转换，维护者只需点两下 Merge。
+
+```
+[投稿人] 在网页填 Issue 表单（大白话，不用碰 git）
+    │
+    ▼
+[GitHub Issue] ──▶ api/issue_to_recipe.py  ──▶ 配方 JSON
+                                                    │
+                                                    ▼
+                                          api/ingest.py ingest ──▶ recipes/<id>.md
+                                                    │
+                                                    └─▶ rebuild（experiences.json + llms.txt）
+[维护者] 看一眼 PR → 点 Merge（唯一闸门）
+```
+
+**1）投稿入口**：`.github/ISSUE_TEMPLATE/投稿一条配方.yml`。
+投稿人不需要懂代码，填完即完成投稿。
+
+**2）Issue → JSON**：`api/issue_to_recipe.py`
+
+```bash
+python api/issue_to_recipe.py --body issue_body.md \
+       --title "<一句话标题>" [--id recipe-xxx] [--contributor "@handel"] \
+       [--out draft.json]
+```
+
+它只做解析、不做创作——**脚本绝不替投稿人补内容**（本库红线：禁止编造踩坑经历）。
+缺必填就一次报全，缺死胡同子字段直接拒绝，不生成半成品。
+
+`status` 默认 `quarantined`：过机器体检先进隔离池，人工审完才转 `published` 公开。
+
+**3）落库**：`python api/ingest.py ingest draft.json`
+
+### 两个已踩过的坑（改代码前先看）
+
+- **`duration` 无处安放**：`recipe.schema.md` v3.0 的顶层没有 `duration`
+  （它只属于 `dead_ends[]` 子结构），44 条现有配方也 0 条使用。
+  投稿人填的「整个坑耗了多久」被折叠进 `problem` 末尾并显式标注，**不丢内容、不改 schema**。
+- **白名单不能手抄第二份**：曾在这里维护一份「支持的字段」列表，结果与
+  `render_md` 的渲染清单不同步，导致投稿内容被静默丢掉。
+  现在唯一真值源是 `ingest.RENDER_ORDER`，本文件消费它，不抄。
 
 ## 5. 验收
 
@@ -60,3 +98,11 @@
 - `curl api/experiences.json` 一次拉全库，字段解析零报错
 - 缺必填的负载被拒（不污染库）
 - `status≠published` 不出现在公开 llms.txt
+
+## 6. 环境（本机实测，别再踩）
+
+- **`ingest` / `rebuild` 必须用带 pyyaml 的解释器**。本仓库 Python 测试
+  （`tests/issue_to_recipe.test.py`）不需要 pyyaml，任何解释器都能跑；
+  但 `ingest` 渲染 frontmatter 必须装了 pyyaml 才能跑，否则报
+  `未安装 pyyaml，无法安全渲染 frontmatter`。
+- 测试：`npm test`（7 套，194 项）。

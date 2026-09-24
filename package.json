@@ -9,11 +9,13 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "node tests/search-baseline.js && node tests/search-pagination.test.js && node tests/search-quarantine.test.js && node tests/mcp-smoke.js && node tests/agent-prompts.test.js && node tests/verify-citations.test.js",
+    "test": "npm run test:search && npm run test:quarantine && npm run test:mcp && npm run test:agent && npm run test:verify && npm run test:ingest",
     "test:search": "node tests/search-baseline.js && node tests/search-pagination.test.js",
+    "test:quarantine": "node tests/search-quarantine.test.js",
     "test:mcp": "node tests/mcp-smoke.js",
     "test:agent": "node tests/agent-prompts.test.js",
     "test:verify": "node tests/verify-citations.test.js",
+    "test:ingest": "python tests/issue_to_recipe.test.py",
     "mcp": "node mcp/server.js"
   }
 }
