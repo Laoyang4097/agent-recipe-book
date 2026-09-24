@@ -33,7 +33,7 @@ const MAX_OFFSET_FLOOR = MAX_LIMIT * 2; // 下限：库很小时也别把 offset
 const MAX_OFFSET_HEADROOM = MAX_LIMIT;  // 在"正好翻完"之外再留一整页余量
 
 /* offset 上限**不能**写死成"库当前几条"：那样库一涨，最后一页就翻不出来
-   （40 条时正好卡在边界，涨到 42 条才开始有隐患，再涨就直接吞数据）。
+   （40 条时正好卡在边界，涨到 41 条才开始有隐患，再涨就直接吞数据）。
    按实际库规模推导，并留一整页余量。回归见 tests/mcp-smoke.js「翻页可覆盖全库」。 */
 export function maxOffsetOf(recipes) {
   const n = Array.isArray(recipes) ? recipes.length : 0;

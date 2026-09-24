@@ -139,7 +139,7 @@ printf '%s\n' \
 **双保险（客户端不支持 prompts 时）**：把 [`AGENT_PROMPT.md`](./AGENT_PROMPT.md) 整段复制为 Agent 的 system 指令，效果同样一致。
 无论哪条路，**知识在库里、规矩同款**，所以不同用户的 Agent 接入后效果一致。
 
-> 关键认知：MCP 里**没有**第二个 AI——它只是查询台。真正让效果一致的是「库里 42 条真实经验 + 同一份培训手册」。
+> 关键认知：MCP 里**没有**第二个 AI——它只是查询台。真正让效果一致的是「库里 44 条真实经验 + 同一份培训手册」。
 > 我们不在 Server 里内置 Agent 去接待对方，而是把「怎么干活的规矩」写成说明书随 MCP 下发。
 
 ---
@@ -161,7 +161,7 @@ printf '%s\n' \
  | node mcp/server.js
 ```
 
-实例回放（2026-09-25 实跑，42 条库；matched 数会随库规模变化，别照抄数字）：
+实例回放（2026-09-25 实跑，44 条库；matched 数会随库规模变化，别照抄数字）：
 
 ```
 [id=1] initialize → protocolVersion=2024-11-05  serverInfo=agent-recipe-book

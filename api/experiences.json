@@ -146,6 +146,100 @@
     "created_at": "2026-09-23"
   },
   {
+    "id": "recipe-git-push-no-tty-credential",
+    "title": "Git Bash 无 tty 下推 GitHub：extraheader 被忽略、credential-manager 弹不了窗",
+    "tags": [
+      "git",
+      "github",
+      "windows",
+      "tooling",
+      "pat"
+    ],
+    "confidence": "A",
+    "model": "WorkBuddy agentic Bash（本机 Windows / Git Bash / PortableGit）",
+    "problem": "手上有 fine-grained PAT，想在无人值守的 Git Bash 里推 GitHub。 连试两条\"标准做法\"都失败，且失败信息都指向同一个假象——git 在问\"你的 username 是什么\"。 本条与 recipe-git-pat-push 是同一件事的第二层：那条记录了 Bearer 头无效（HTTP 层）， 这条记录了凭据获取层在无 tty 环境下同样走不通。",
+    "dead_ends": [
+      {
+        "attempt": "沿用在文档里见过的 `git -c http.extraheader=\"Authorization: Bearer $TOK\" push origin main`（整段含冒号，故此处整体加引号）",
+        "failure": "仍然报 `could not read Username for 'https://github.com'`。 注意这条与 recipe-git-pat-push 记录的症状完全一致——**同一个坑隔了几天的第二次踩**。 当时那条配方的解法是「把 PAT 嵌在 URL 里当 Basic Auth」，这次没照做，直接走了错的那条路。",
+        "duration": "5min",
+        "early_signal": "凡是要靠 `-c` 传 http 头的写法，都只在单次调用里生效，且不落盘； 一旦 git 需要向凭证子系统追问（而不是从 header 拿到），它就会退回交互问用户名"
+      },
+      {
+        "attempt": "什么都不配，指望 PortableGit 自带的凭据管理器自己弹窗要 token",
+        "failure": "报 `bash: line 1: /dev/tty: No such device or address` + `error: failed to execute prompt script (exit code 1)` + `fatal: could not read Username for \"https://github.com\"`。 根因是 PortableGit 的 credential.helper 指向 `git-credential-manager.exe`（Win10 凭据管理器 GUI 弹窗）， 而 agentic / 非交互 shell 没有 tty，弹不出来 → 直接判失败。",
+        "duration": "15min",
+        "early_signal": "非交互环境里凡是「弹窗」类的解法的共同失败点是 /dev/tty 不存在。 先确认 credential.helper 指向什么：`git config --list --show-origin | grep -i credential`"
+      },
+      {
+        "attempt": "把 PAT 写进 ~/.git-credentials 后，用 Python `os.chmod(path, 0o600)` 收紧权限",
+        "failure": "写完复查权限位仍是 0o666——Windows 没有 POSIX 权限位，chmod 是空操作。 好消息是 Windows 下该文件默认只属于当前用户，实际风险可控，但**别以为 chmod 过就安全了**。",
+        "duration": "2min",
+        "early_signal": "Windows 上 os.chmod 对 .git-credentials 无效；若在意， 改放到只有自己能读的位置，或用 `icacls file /reset` 显式设置 ACL"
+      }
+    ],
+    "solution": "① 绕开凭据管理器：`git config --local credential.helper store` （写仓库本地配置，不污染全局）； ② 在 `~/.git-credentials` 写一行 `https://<username>:<PAT>@github.com`； ③ 正常 `git push origin main`，git 会自己去凭据文件里取。 好处是此后所有 push 都不必再带 token，也不用在 .git/config 里留下明文 remote URL。",
+    "result": "三条死路走完后按上述解法一次推送成功（`317a861..cff2801`）， CI 与 GitHub Pages 均正常触发。",
+    "retrospective": "这个坑被记录过一次，第二次还是踩了——**因为读配方的人（当时的我）没有把 解法抄进自己的流程，只是记住了\"有这条坑\"**。配方库的价值不在「机械地罗列坑」， 而在「下次动手前先看一眼 solution」。凡是 solution 里有可以直接复制的一行命令的坑， 就别只把它当故事读。另外，「非交互环境」是一个应单独记档的约束维度： 它让几乎所有「弹窗 / 交互确认」类的标准解法同时失效。",
+    "skills": [
+      "git",
+      "github",
+      "windows"
+    ],
+    "harness": "WorkBuddy agentic Bash（Windows / Git Bash / PortableGit）",
+    "hardware": {
+      "os": "win32 (Git Bash)"
+    },
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-25"
+  },
+  {
+    "id": "recipe-git-repo-location-assumed",
+    "title": "只查一层就说\"这里不是 git 仓库\"——验证范围小于结论所依赖的前提",
+    "tags": [
+      "git",
+      "verification",
+      "verification-scope",
+      "tooling"
+    ],
+    "confidence": "A",
+    "model": "WorkBuddy agentic Bash（本机 Windows）",
+    "problem": "需要判断一个工作区是不是 git 仓库、能不能提交。 在根目录跑 `git rev-parse` 拿到 `fatal: not a git repository`， 随即断言\"整个工作区不是 git 仓库\"，并据此告诉用户\"得先 git init + remote add\"。 实际上仓库就在隔壁的 `agent-recipe-book/.git`，remote 早已配好、CI 和 Pages 都在跑。",
+    "dead_ends": [
+      {
+        "attempt": "在目标目录跑一次 `git rev-parse --show-toplevel`，拿到非 0 退出码，就认定结论成立",
+        "failure": "返回 `fatal: not a git repository (or any of the parent directories): .git`。 **这个错误信息只证明了\"当前这一层往上都没有 .git\"**，但它读起来像是\"这个目录不是仓库\"。 于是得出了一个正好相反的结论，还把它写进了给用户看的报告。",
+        "duration": "3min",
+        "early_signal": "错误信息的作用域比看起来窄。凡是「查 A 得不出 A」的报错—— 「这里不是仓库」说的是当前目录、而非整个工作区——都要先想清楚它到底覆盖了什么范围 再据此下结论，或者干脆换个能直接回答问题的命令"
+      },
+      {
+        "attempt": "把「当前目录不是仓库」升级成「这里没有 .git」乃至「这里不该是仓库」",
+        "failure": "顺着这个错误结论，给出的建议是\"先 git init + 配 remote\"—— 而用户早就在用 GitHub 了（remote = github.com/Laoyang4097/agent-recipe-book）， 按那条建议做会**把一个已有仓库的轮子重新造一遍**，并在根目录多出一个互不相干的仓库。 最终是靠 `find . -maxdepth 3 -name \".git\"` 才发现仓库一直在子目录里。",
+        "duration": "10min",
+        "early_signal": "想确认「某处是不是仓库」就直接去找标记物（`find . -maxdepth N -name .git`）， 不要用「在某个代表性目录上跑命令」来推断整体； 反过来，要确认「一个已知仓库里的某条命令会怎么表现」，才该在其子目录里跑"
+      }
+    ],
+    "solution": "判断仓库位置用 `find . -maxdepth 3 -name \".git\" -o -maxdepth 3 -name \"*.gitattributes\"`， 再 `git -C <dir> remote -v` 看 remote 到底指向哪里。 判断当前目录是不是仓库才会用 `git rev-parse` 两者有不同的适用面，别混用。",
+    "result": "改用 find 后 10 秒内定位到仓库与 remote，4 个语义提交一次性推送成功， 没有产生多余的 git init。",
+    "retrospective": "讽刺的是，这次犯错的当天刚把 `recipe-infra-verify-silent-pass`（三处\"验证通过\"其实是没验证到）写进库里。 那一条讲失败没有被暴露——这次则是**验证装置确实跑了、也确实报错了， 是我把报错读成了另一个意思**。同一类错误的第三种形态： 上一次是\"没看信号\"，这一次是\"信号对了、解读错了\"。 判断规则可以压成一句：**结论的成立范围，必须不小于你验证它的范围。**",
+    "skills": [
+      "git",
+      "verification"
+    ],
+    "harness": "WorkBuddy agentic Bash（Windows / Git Bash）",
+    "hardware": {
+      "os": "win32 (Git Bash)"
+    },
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-25"
+  },
+  {
     "id": "recipe-infra-verify-silent-pass",
     "title": "三处\"验证通过\"其实是没验证到：端口残留 / 日志过滤 / 兜底分类",
     "tags": [
