@@ -5,6 +5,7 @@
 - recipes/recipe-gh-pages-pat-scope.md: fine-grained PAT 开不了 GitHub Pages：权限逐项授予，缺 Pages 就是 403 — 两条路：① 给该 fine-grained PAT 追加 Pages: Read
 - recipes/recipe-git-api-push-stale-ref.md: 走 API 推送后本地显示 ahead N：本地 origin 指针的陈旧假象 — ① 用「内容比对」而非「引用计数」判断同步：逐文件对比本地内容与远端 API 返
 - recipes/recipe-git-pat-push.md: 用 fine-grained PAT 推 GitHub：Bearer 头被 git 忽略，必须 URL 内嵌 token 当 Basic Auth — ① git smart-HTTP 用 Basic Auth，Bearer 头无效
+- recipes/recipe-infra-verify-silent-pass.md: 三处"验证通过"其实是没验证到：端口残留 / 日志过滤 / 兜底分类 — ① 服务/探针类脚本：启动前确认端口真的空闲，日志落文件而不是写 /dev/nu
 - recipes/recipe-managed-python-env-pitfalls.md: 在 WorkBuddy 托管 Python 环境跑依赖脚本的坑（缺包 / 丢 git 身份 / cwd 不持久 / YAML 日期序列化） — ① 建隔离 venv 装依赖：`python -m venv .../envs/
 - recipes/recipe-pj-guess-as-conclusion.md: 把拍脑袋的估计当结论写进文档 —— 20 分钟能测出来的数，用「大概」代替 — 把「性能 / 容量」类断言统一改成「实测 + 拐点」写法：写一个 20 行的基准
 - recipes/recipe-pj-requirement-misremembered.md: 把主办方要求记错，按「常识」排期 —— 差点白耗 2-3 天做错重点 — 把主办方原文拆成三栏清单：初赛必交 / 初赛可选 / 决赛必交，每条标注原文出处
@@ -39,6 +40,7 @@
 - recipes/recipe-web-playwright-download-throttled.md: Playwright 与 chromium 下载全被节流卡死：改用系统现成浏览器 — 放弃 Playwright 路线，改用系统里已安装的 Edge 的 headle
 - recipes/recipe-web-reduced-motion-degrade.md: 平滑滚动变「闪现」：prefers-reduced-motion 把位移降级了 — ① 显式控制滚动行为：读取 prefers-reduced-motion，red
 - recipes/recipe-web-subview-refresh-miss.md: 切换筛选维度后局部视图不刷新：render() 里漏了 renderTags() — 在分类切换的处理里显式补调 renderTags()，并在代码里加注释写明「re
+- recipes/recipe-web-third-party-font-blocks-fcp.md: 静态站上一个 Google Fonts 引用吃掉 33% 首屏时间：删掉后 FCP 512ms → 344ms — ① 把 index.html 里 2 个通往 fonts.googleapis.
 - recipes/recipe-web-thumbnail-misjudge.md: 缩略图看走眼：同一现象连续误判三次「移动端文字被裁」 — 用注入式探针取客观数据代替肉眼：document.documentElement
 - recipes/recipe-web-wcag-muted-contrast.md: 次级灰字对比度只有 3.06:1：看着「还行」实则不达 WCAG AA — 按 WCAG 相对亮度公式逐个色值计算对比度，把不达标的次级色调深：--mute
 - recipes/recipe-yaml-frontmatter-colon.md: 手写 YAML frontmatter 时 failure 含冒号被当键值分隔符，渲染/回读直接崩——改用 yaml.safe_dump — ① frontmatter 永远用 yaml.safe_dump(dict) 生

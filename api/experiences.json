@@ -7,6 +7,7 @@
       "tooling",
       "ci"
     ],
+    "confidence": "A",
     "model": "Deepseek-V4.1-Flash",
     "problem": "站点文件已推上 main，想用 API 顺手把 GitHub Pages 打开、省掉手动操作，结果被拒。",
     "dead_ends": [
@@ -47,6 +48,7 @@
       "tooling",
       "ci"
     ],
+    "confidence": "A",
     "model": "Deepseek-V4.1-Flash",
     "problem": "用 Git Data API 直接向远端提交后，本地 git status 一直显示领先远端若干个提交，看起来像「还有东西没推上去」。",
     "dead_ends": [
@@ -106,6 +108,7 @@
       "auth",
       "tooling"
     ],
+    "confidence": "A",
     "model": "Git 2.x + GitHub fine-grained PAT",
     "problem": "用 fine-grained PAT 推 GitHub 时，想用 git -c http.extraheader=Authorization: Bearer <token> 免输凭证，结果 git 仍要 username、推送失败。后来发现 git 的 smart-HTTP 走 Basic Auth，Bearer 头被忽略，必须把 token 嵌进 URL 当 Basic 凭据；推完还得把 remote URL 里的 token 还原，否则 token 明文留在 .git/config。",
     "dead_ends": [
@@ -143,6 +146,55 @@
     "created_at": "2026-09-23"
   },
   {
+    "id": "recipe-infra-verify-silent-pass",
+    "title": "三处\"验证通过\"其实是没验证到：端口残留 / 日志过滤 / 兜底分类",
+    "tags": [
+      "shell",
+      "tooling",
+      "verify-before-claim",
+      "ci-cd"
+    ],
+    "confidence": "A",
+    "model": "WorkBuddy agentic Bash（本机 Windows / Git Bash）",
+    "problem": "连着三天，同一类事情反复发生——我以为自己验证了，实际上验证装置根本没跑起来、或者根本没看住信号。 三件事的表象都是\"没报错、测试绿、看起来没问题\"，但结论全是假的：探针跑的是旧进程、 更新操作被幂等保护挡下还被我自己的日志过滤吃掉、新配方被静默归进了错的分类。",
+    "dead_ends": [
+      {
+        "attempt": "改完探针脚本后直接重跑，读输出就下\"验证通过\"",
+        "failure": "跑的还是旧版探针——8092 端口上上一个进程没退，新服务 EADDRINUSE 静默退出， 错误输出被重定向到 /dev/null 吞掉；唯一线索是输出格式还停留在旧版本。",
+        "duration": "15min",
+        "early_signal": "输出格式'看起来不太对'本身就是信号。杀进程要 `netstat -ano | grep :PORT | awk '{print $NF}' | sort -u` 把全部 PID 列出来逐个杀，只取 head -1 会漏掉其它残留"
+      },
+      {
+        "attempt": "用 `grep -E \"已写入|错误\"` 过滤渲染脚本的输出，只看有没有目标行，认定\"没有错误信息就是成功\"",
+        "failure": "更新已有配方时脚本有幂等保护，会打印 `❌ id 已存在`，而我过滤的行首正好不含这些关键字 → 错误被静默吞掉 → 差点推送一个'看似成功、但配方文件与索引其实都没更新'的变更",
+        "duration": "10min",
+        "early_signal": "日志过滤后为空，必须确认是'真没有输出'还是'我把信号滤掉了'。 修法有二：不过滤输出；或更新已有配方时先删掉旧 md 再重新渲染"
+      },
+      {
+        "attempt": "新增一个内容分类下的配方，只往内容目录加文件，没有同步改分类的兜底正则",
+        "failure": "新配方被静默归进了「工具链」组——不报错、既有测试也不红（兜底规则\"看起来\"没问题）， 只有人打开页面才会发现分类条上的计数不对",
+        "duration": "30min",
+        "early_signal": "兜底规则（else 分支）会把任何没显式匹配的输入静默归到最后一类。 扩展分类时必须同步改兜底，并加一条闭合性断言：各分类计数之和 == 全库条数"
+      }
+    ],
+    "solution": "① 服务/探针类脚本：启动前确认端口真的空闲，日志落文件而不是写 /dev/null， 改完输出格式后先跑一次空跑确认是新版在说话； ② 命令输出不做二次过滤，或过滤后显式检查错误关键字（❌ / Error / Failed / FAILED）的条数； ③ 任何带分类与兜底的逻辑，都补一条\"分类计数闭合\"断言。",
+    "result": "三处均修复并复核——探针端口清空后跑的确实是新版、渲染错误可见且配方正确更新、 新增内容被正确归类且各分类计数之和与全库条数一致。",
+    "retrospective": "验证类工作的敌人不是失败，是\"没有失败信号\"。端口占用、日志过滤、兜底分支， 三者都会把一个失败的环境伪装成\"什么都没发生\"。凡是\"输出看起来不对\"的时刻， 先怀疑验证装置本身，再怀疑被测对象——本项目里据此纠正过三次\"视觉 bug\"，其中三次都是装置的问题。",
+    "skills": [
+      "bash",
+      "verification"
+    ],
+    "harness": "WorkBuddy agentic Bash（Windows / Git Bash）",
+    "hardware": {
+      "os": "win32 (Git Bash)"
+    },
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-25"
+  },
+  {
     "id": "recipe-managed-python-env-pitfalls",
     "title": "在 WorkBuddy 托管 Python 环境跑依赖脚本的坑（缺包 / 丢 git 身份 / cwd 不持久 / YAML 日期序列化）",
     "tags": [
@@ -153,6 +205,7 @@
       "yaml",
       "ci-cd"
     ],
+    "confidence": "A",
     "model": "Agent+managed Python 3.13.12 (WorkBuddy 沙箱)",
     "problem": "要在 WorkBuddy 沙箱里跑一个 Python 脚本（项目里的 api/ingest.py，需要 pyyaml 解析 frontmatter），并把改动提交推到 GitHub。结果连踩几个环境坑：脚本跑不起来、commit 被拒、路径解析错位、JSON 序列化崩。",
     "dead_ends": [
@@ -179,6 +232,18 @@
         "failure": "json.dump 抛 TypeError: Object of type date is not JSON serializable，experiences.json 只写一半(2066字节残档)",
         "duration": "5min",
         "early_signal": "YAML 把 `created_at: 2026-09-22` 解析成 date 对象，json 无法直接序列化；render/parse 后给 json.dump 加 default=str 兜底"
+      },
+      {
+        "attempt": "写了个本地静态服务分发文件，用 path.join 拼好路径后和代码里硬写的正斜杠前缀比较",
+        "failure": "path.join 产出的是反斜杠，和正斜杠前缀做 startsWith 恒为 false → 静态服务对所有路径返回 403，页面一片空白",
+        "duration": "20min",
+        "early_signal": "Windows 上路径分隔符是反斜杠；比较路径前两侧都过一遍 path.resolve，或统一用 path.sep"
+      },
+      {
+        "attempt": "往补丁脚本第一行写 `/* 说明 */` 注释（沿用了写 JS 的习惯）",
+        "failure": "SyntaxError，补丁整段没生效。而我没看到报错就当它生效了，差点漏进提交",
+        "duration": "5min",
+        "early_signal": "Python 只有 # 注释、没有块注释；改完补丁必须回读目标文件，确认内容真的变了"
       }
     ],
     "solution": "① 建隔离 venv 装依赖：`python -m venv .../envs/default && .../Scripts/pip install pyyaml`；② 给本仓库设局部 git 身份 `git config user.name/user.email`（仅本仓库，不污染全局）；③ 所有脚本调用用绝对路径或先 `cd` 到仓库根；④ 在 json.dump 加 `default=str` 兜底 YAML 日期对象。最终 `ingest.py rebuild` 正常生成 experiences.json + llms.txt，commit + PAT 内嵌 push 成功。",
@@ -207,6 +272,7 @@
       "estimation",
       "verify-before-claim"
     ],
+    "confidence": "A",
     "model": "Deepseek-V4.1-Flash",
     "problem": "在设计文档里写下「配方超过 1000 条就该换检索方案」。这是我凭经验估的阈值，却写成了结论句 —— 读者（包括未来的自己）不会怀疑它。",
     "dead_ends": [
@@ -240,6 +306,7 @@
       "planning",
       "verify-before-claim"
     ],
+    "confidence": "A",
     "model": "Deepseek-V4.1-Flash",
     "problem": "为一项 14 天截止的参赛做排期。我按「比赛一般都要交演示视频」的常识，把「录屏 Demo」排成了第二里程碑的主项（预估 2-3 天）。用户把赛程原文贴出来后重读才发现：2 分钟 Demo 视频是**决赛**要求，初赛只需说明书 PDF + 可选附件 —— 录屏在初赛只是「可选附件」里的一个选项。",
     "dead_ends": [
@@ -273,6 +340,7 @@
       "project-judgment",
       "verify-before-claim"
     ],
+    "confidence": "A",
     "model": "Deepseek-V4.1-Flash",
     "problem": "用户问「校园事务类内容该不该收进这个库」。我凭对 Schema 的印象回答「判据是有没有死胡同」，还顺口举了两个「听起来像」的例子来支撑结论。用户追问「那这个库只能装电脑工程问题的坑吗」，我被逼去逐字段核对原文 —— 才发现判据漏了一条硬约束：必填字段 model 决定了「必须是用 AI 做过的过程」，我举的例子根本填不出来。",
     "dead_ends": [
@@ -287,6 +355,12 @@
         "failure": "两个例子在严格核对下都要打问号（过程里到底有没有用 AI？），反而削弱了本来站得住的结论",
         "duration": "约 10min",
         "early_signal": "举例支撑结论时，要挑「自己真的做过」的，而不是「听起来像」的"
+      },
+      {
+        "attempt": "给刚写完的接口补文档，参数名凭「上次大概是这么写的」的记忆来填",
+        "failure": "把参数名写成了 group（印象里的写法），实际签名是 tags（数组、AND 语义）。 幸好事后回查实现才发现——文档一旦写错，读它的人会照着错的用",
+        "duration": "约 10min（从而在文档里修正 1 处）",
+        "early_signal": "即使是给自己写的接口写文档，参数名也要回查实现；记忆里存的是印象，不是签名"
       }
     ],
     "solution": "① 引用任何规则/字段/参数前，先打开原文逐项核对，不要用记忆代替；② 给结论时明确区分「我核对过」与「我记得」；③ 举例只用自己真实经历过的，宁可少给例子。",
@@ -307,6 +381,7 @@
       "scrape",
       "headless"
     ],
+    "confidence": "A",
     "model": "Agent+Python requests",
     "problem": "用 requests 抓两个公开反爬站（某 SaaS 评测站、某招聘点评站），默认 python-requests UA 单次请求即被拦截：一个返回 403 + JS/DataDome 挑战骨架，一个返回 403 纯文本 Forbidden。此时最大误区是『换个 UA / 加代理 / 上打码』继续硬推——正确做法是识别反爬信号后立即停止该目标，把它记为不可抓取的 dead_end，而不是尝试绕过。",
     "dead_ends": [
@@ -340,6 +415,7 @@
       "encoding",
       "scrape"
     ],
+    "confidence": "A",
     "model": "Agent+Python requests",
     "problem": "抓某公开 HTTP 测试服务返回的压缩响应(标准回显端点，路径如 /gzip、/deflate、/brotli)时，看到响应头 Content-Encoding: gzip，直觉认为『body 是压缩的、得自己解压』，于是对 r.content 调 gzip.decompress()——结果直接抛异常。真相是 requests 在底层已经透明解压，r.content 拿到的就是明文；bro 更隐蔽：响应头声明 Content-Encoding: br，但环境未装 brotli/requests 无法解，r.content 是原始 br 字节、r.text 是乱码，却不报错。",
     "dead_ends": [
@@ -385,6 +461,7 @@
       "encoding",
       "scrape"
     ],
+    "confidence": "A",
     "model": "Agent+Python requests",
     "problem": "用 requests 抓某政务站首页，r.text 取回的中文全是 'ä¸æ¿åºç½' 一类乱码；而 r.encoding 默认给出 ISO-8859-1，页面实际是 UTF-8。坑点：当响应头 Content-Type 只有 'text/html'、不带 charset 时，requests 按 RFC 回退 ISO-8859-1，r.text 就静默乱码，不报任何异常。",
     "dead_ends": [
@@ -424,6 +501,7 @@
       "scrape",
       "tooling"
     ],
+    "confidence": "A",
     "model": "Deepseek-V4.1-Flash",
     "problem": "用高层 WebFetch 工具批量抓公开页来生成「采集踩坑」配方。产出的 11 条结构完整、看着也像模像样，但复盘时发现它们根本不能代表真实采集场景。",
     "dead_ends": [
@@ -469,6 +547,7 @@
       "selector",
       "encoding"
     ],
+    "confidence": "A",
     "model": "Agent+Python requests",
     "problem": "抓某公开引用练习站做结构化抽取时，用正则/HTMLParser 取到标签之间的文本后直接入库，结果字段里带着 HTML 实体：同一页出现 &#39; 共 4 次、&rarr; 1 次，正文里的撇号、箭头都以实体形式存进了 JSON。如果为了『省事』手写 replace 链清洗，顺序写错还会把 &amp;lt; 二次解码成 '<'，把数据改坏。",
     "dead_ends": [
@@ -509,6 +588,7 @@
       "timing",
       "session"
     ],
+    "confidence": "A",
     "model": "Agent+Python requests",
     "problem": "requests 把很多 HTTP 细节藏了起来，导致对『重定向/超时/压缩/TLS/连接复用』的行为判断出错：以为不跟随重定向能拿到内容（实际拿到 0 字节）、以为超时只有一种（实际连超时与读超时是两回事）、以为 Connection 头能证明连接复用（实测取不到）。",
     "dead_ends": [
@@ -548,6 +628,7 @@
       "pagination",
       "scrape"
     ],
+    "confidence": "A",
     "model": "Agent+Python requests",
     "problem": "用 requests 抓某新闻门户『滚动新闻』列表翻 3 页时发现：改用 ?page=2 这类查询参数后服务端仍返回 HTTP 200、没有任何报错，内容却和第 1 页一模一样——分页被静默忽略。正确分页其实靠 URL 路径里的数字（/scroll-news/news1.html…newsN.html）。",
     "dead_ends": [
@@ -587,6 +668,7 @@
       "scrape",
       "selector"
     ],
+    "confidence": "A",
     "model": "Agent+Python requests",
     "problem": "用 requests 抓某新闻门户首页想提取文章标题，结果一个页面上 649 个链接里只有约 30% 像文章，大量导航、平台入口、广告位、多频道入口和重复模板混在一起，用正则或『抓所有 <a>』根本分不出正文。",
     "dead_ends": [
@@ -627,6 +709,7 @@
       "rate-limit",
       "timing"
     ],
+    "confidence": "A",
     "model": "Agent+Python requests",
     "problem": "判断『连续抓取会不会被限流』时，最容易只看 HTTP 状态：连续 15-18 次请求全部 200、没有 429，就下结论『该站不限流』。真跑发现这个结论不可靠——一个站用响应头静默计数限流（耗尽才拒绝），另一个站前 16 次全被 CDN 缓存挡下、根本没打到源站，状态码和耗时都毫无信息量。",
     "dead_ends": [
@@ -660,6 +743,7 @@
       "session",
       "scrape"
     ],
+    "confidence": "A",
     "model": "Agent+Python requests",
     "problem": "抓某公开 HTTP 测试服务时，先请求一个『设置 cookie 并 302 跳到回显页』的标准回显端点(路径如 /cookies/set)，再用 requests.get 单独请求回显端点(/cookies)想读回 cookie，结果拿到空对象 {'cookies': {}}。直觉以为『requests 会自动保存并带上 cookie』，实际每一次 requests.get 都是彼此独立的一次会话，cookie 不会跨调用保留；更阴的是，想拿第一次响应的 r1.cookies 手动搬运，r1.cookies 也是空的。",
     "dead_ends": [
@@ -699,6 +783,7 @@
       "scrape",
       "headless"
     ],
+    "confidence": "A",
     "model": "Agent+Python requests",
     "problem": "用 requests 抓某短视频站（SPA）公开首页，拿到了 200 和 72KB HTML，但去掉标签后正文字符为 0，页面上所有内容（推荐流/视频/作者/评论）都不在静态 HTML 中，正文靠 JS 渲染，requests 只能拿到空壳。",
     "dead_ends": [
@@ -738,6 +823,7 @@
       "scrape",
       "selector"
     ],
+    "confidence": "A",
     "model": "Agent+Python requests",
     "problem": "抓含合并单元格的公开表格后，按『每个 <tr> 的 <td> 数=列数』直接取数会错位：多行表头 + rowspan/colspan 让各行单元格数不一致，且部分表的 tbody 为空（数据靠 JS 填充），照常解析只能拿到表头。",
     "dead_ends": [
@@ -783,6 +869,7 @@
       "anti-bot",
       "scrape"
     ],
+    "confidence": "A",
     "model": "Agent+Python requests",
     "problem": "用 requests 默认 UA（python-requests/2.34.2）抓公开页，站方按 UA 差异处理：同一搜索站同为 200 却返回被裁剪的骨架页；问答站直接 403 JSON；短视频站 444；而有的站（代码托管）对 UA 完全不敏感。只看 status 会把残缺页当成功。",
     "dead_ends": [
@@ -828,6 +915,7 @@
       "shell",
       "tooling"
     ],
+    "confidence": "A",
     "model": "Deepseek-V4.1-Flash",
     "problem": "在 bash 里用 heredoc 把一段 Python 脚本喂给解释器执行，脚本里有引号、模板字符串与 f-string，执行时报语法错误或内容被 shell 提前展开。",
     "dead_ends": [
@@ -868,6 +956,7 @@
       "search",
       "encoding"
     ],
+    "confidence": "A",
     "model": "Deepseek-V4.1-Flash",
     "problem": "用户按输入框提示输入「抓回来是乱码」，点检索毫无结果；用户以为是按钮坏了，实际是搜索本身搜不到东西。",
     "dead_ends": [
@@ -906,6 +995,7 @@
     "tags": [
       "design-system"
     ],
+    "confidence": "A",
     "model": "Deepseek-V4.1-Flash",
     "problem": "为了制造视觉焦点，在纯白页面上放了一个深色圆角搜索框。单看很酷，整体却像贴了块膏药，与页面气质割裂。",
     "dead_ends": [
@@ -945,6 +1035,7 @@
       "design-system",
       "motion"
     ],
+    "confidence": "A",
     "model": "Deepseek-V4.1-Flash",
     "problem": "初版为了「后现代科技感」加了粒子网络背景、顶部流动扫描线、品牌均衡器竖条，自我感觉良好，但整体观感像模板站。",
     "dead_ends": [
@@ -985,6 +1076,7 @@
       "tooling",
       "web-verify"
     ],
+    "confidence": "A",
     "model": "Deepseek-V4.1-Flash",
     "problem": "功能已推送、CI 通过、远端源码确认是新版，但用户打开线上站点仍看不到新加的那排分类条。",
     "dead_ends": [
@@ -1030,6 +1122,7 @@
       "web-verify",
       "headless"
     ],
+    "confidence": "A",
     "model": "Deepseek-V4.1-Flash",
     "problem": "在诊断页里依次测 390px 与 1280px 两个宽度，截图时 iframe 停在 1280，而外层容器只有 390px 宽且 overflow:hidden —— 看到的是「桌面布局被裁掉右边」，却当成移动端渲染来分析。",
     "dead_ends": [
@@ -1069,6 +1162,7 @@
       "web-verify",
       "tooling"
     ],
+    "confidence": "A",
     "model": "Deepseek-V4.1-Flash",
     "problem": "用无头浏览器 --dump-dom 做自动化校验，想读取被测页面的 DOM，结果输出里只有外层包装页，被测页面的内容全空。",
     "dead_ends": [
@@ -1108,6 +1202,7 @@
       "frontend",
       "ux"
     ],
+    "confidence": "A",
     "model": "Deepseek-V4.1-Flash",
     "problem": "搜索框在页面上部、结果列表在页面下部，点检索后页面纹丝不动，使用者判断「按钮没反应」，必须手动往下翻才发现筛选已生效。",
     "dead_ends": [
@@ -1147,6 +1242,7 @@
       "frontend",
       "ux"
     ],
+    "confidence": "A",
     "model": "Deepseek-V4.1-Flash",
     "problem": "加上「点检索后滚动到结果区」之后，点击按钮却总是先跳回搜索框再滚动，行为互相拉扯。",
     "dead_ends": [
@@ -1187,6 +1283,7 @@
       "headless",
       "screenshot"
     ],
+    "confidence": "A",
     "model": "Deepseek-V4.1-Flash",
     "problem": "用 Edge/Chrome headless 的 --window-size=390,1000 截移动端图做响应式验证，看到的布局与真机不符，据此误判「移动端横向溢出」并白改了两轮 CSS。",
     "dead_ends": [
@@ -1232,6 +1329,7 @@
       "tooling",
       "headless"
     ],
+    "confidence": "A",
     "model": "Deepseek-V4.1-Flash",
     "problem": "连续截两张图，第二张报 exit code 23、截图文件根本不生成。",
     "dead_ends": [
@@ -1271,6 +1369,7 @@
       "web-verify",
       "headless"
     ],
+    "confidence": "A",
     "model": "Deepseek-V4.1-Flash",
     "problem": "验证「点检索会不会滚动到结果区」，注入脚本报告 scrollY=0 未滚动，差点去改产品代码。",
     "dead_ends": [
@@ -1311,6 +1410,7 @@
       "css",
       "search"
     ],
+    "confidence": "A",
     "model": "Deepseek-V4.1-Flash",
     "problem": "卡片摘要用 JS slice 按字符硬切，结尾断在「默认 python-requests U...」这种怪位置；加搜索高亮后更严重 —— 命中词若落在视觉截断之外，用户看到一条结果却找不到它为什么在。",
     "dead_ends": [
@@ -1349,6 +1449,7 @@
     "tags": [
       "web-verify"
     ],
+    "confidence": "A",
     "model": "Deepseek-V4.1-Flash",
     "problem": "验证「滚动到结果区后落点高亮是否触发」，报告 flash class = false，看起来功能没生效。",
     "dead_ends": [
@@ -1387,6 +1488,7 @@
     "tags": [
       "tooling"
     ],
+    "confidence": "A",
     "model": "Deepseek-V4.1-Flash",
     "problem": "为了做网页截图验证，安装 Playwright：pip 轮子与 chromium 浏览器（约 150MB）全部下载超时，等了数分钟毫无进展。",
     "dead_ends": [
@@ -1432,6 +1534,7 @@
       "frontend",
       "a11y"
     ],
+    "confidence": "A",
     "model": "Deepseek-V4.1-Flash",
     "problem": "用户反馈点检索后是「闪现」到列表、没有过渡，怀疑是动画写错。",
     "dead_ends": [
@@ -1471,6 +1574,7 @@
       "frontend",
       "tooling"
     ],
+    "confidence": "A",
     "model": "Deepseek-V4.1-Flash",
     "problem": "给页面加了「领域分类」一级筛选后，点分类时卡片数量正确变了，但下方那排标签胶囊还是全部领域的，没跟着换。",
     "dead_ends": [
@@ -1504,11 +1608,61 @@
     "created_at": "2026-09-24"
   },
   {
+    "id": "recipe-web-third-party-font-blocks-fcp",
+    "title": "静态站上一个 Google Fonts 引用吃掉 33% 首屏时间：删掉后 FCP 512ms → 344ms",
+    "tags": [
+      "css",
+      "frontend",
+      "deploy"
+    ],
+    "confidence": "A",
+    "model": "WorkBuddy agent + Edge headless（本机实测）",
+    "problem": "给静态站加\"更好看的字体\"，照常见做法在 index.html 里引了 Google Fonts（2 个 preconnect + 1 个 stylesheet）。 结果性能体检发现：这是全站唯一位于渲染阻塞关键路径上的第三方资源，本地一次请求就要 240ms， 子资源请求 4 个、第三方依赖 1 个。删掉之后 FCP 从 512ms 掉到 344ms。",
+    "dead_ends": [
+      {
+        "attempt": "照网上的常见写法把 Google Fonts 的 preconnect + stylesheet 直接加进 index.html",
+        "failure": "实测 FCP 512ms；那个 CSS 一拉就返回 40 条 @font-face 规则、分别指向 40 个 woff2 子集， 等于把一个\"字体文件分发服务\"塞进了首屏关键路径",
+        "duration": "40min",
+        "early_signal": "性能体检里的\"第三方依赖数\"这一项。渲染阻塞的外部资源优先归零，比任何代码级微优化都划算"
+      },
+      {
+        "attempt": "想做对照实验，用 --host-resolver-rules=\"MAP fonts.googleapis.com 10.255.255.1\" 模拟国内字体不可达",
+        "failure": "指向不可路由地址是\"快速失败\"而不是\"超时\"，测出的 FCP 反而更快（304ms）—— 该对照实验的结论与假设相反，不能代表国内真实超时场景",
+        "duration": "20min",
+        "early_signal": "要模拟\"请求卡住\"，必须让它挂起；不可路由 IP 直接 RST，行为和真实网络超时完全不同"
+      },
+      {
+        "attempt": "担心删掉字体后观感会退化、标题和正文会变丑",
+        "failure": "实际肉眼几乎无差别——styles.css 里早已写好完整系统字体栈 （system-ui / -apple-system / Segoe UI / PingFang SC / Microsoft YaHei），英文走系统 UI 字体、中文走雅黑/苹方",
+        "duration": "5min",
+        "early_signal": "先确认 fallback 栈完整，再谈\"要不要字体\"；有完整 fallback 时，第三方字体是审美升级而不是功能依赖"
+      }
+    ],
+    "solution": "① 把 index.html 里 2 个通往 fonts.googleapis.com / fonts.gstatic.com 的 preconnect 与 1 个 stylesheet link 整段删掉，在原处留注释说明\"刻意不引用外部字体，避免第三方依赖进入关键路径\"； ② 字体改走 styles.css 已有的系统字体栈，一行代码都不用改； ③ 做 before/after 对照（旧版用 `git show HEAD:index.html > _old_index.html` 取回，同机同环境各测一遍）； ④ 部署后回查公网产物，确认引用为 0 且功能未受影响。 最终：子资源请求 4 → 3、FCP 512 → 344ms（-33%）、第三方依赖 1 → 0。",
+    "result": "首屏请求 4→3、第三方依赖 1→0、FCP 512ms→344ms；公网核验 fonts.googleapis 与 preconnect 引用均为 0， 分类条与卡片渲染功能未受影响，CI 3 个 run 全绿。",
+    "retrospective": "性能问题优先找\"关键路径上的外部依赖\"，而不是先去调代码。一个渲染阻塞的第三方资源， 删除它的收益远大于任何代码级微优化。附带教训：做对比实验前先验证\"实验设计本身能产生你想测的现象\"， 否则一个反向的测量结果会让你把对的决定推翻成错的。",
+    "skills": [
+      "css",
+      "performance-audit"
+    ],
+    "harness": "WorkBuddy agentic Bash + Edge headless",
+    "hardware": {
+      "os": "win32 (Git Bash)",
+      "browser": "Edge (headless)"
+    },
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-2f183a",
+    "created_at": "2026-09-25"
+  },
+  {
     "id": "recipe-web-thumbnail-misjudge",
     "title": "缩略图看走眼：同一现象连续误判三次「移动端文字被裁」",
     "tags": [
       "web-verify"
     ],
+    "confidence": "A",
     "model": "Deepseek-V4.1-Flash",
     "problem": "从截图缩略图看，移动端副标题、胶囊像是被右边框切断，连续三轮回合都据此改了代码。",
     "dead_ends": [
@@ -1548,6 +1702,7 @@
       "design-system",
       "a11y"
     ],
+    "confidence": "A",
     "model": "Deepseek-V4.1-Flash",
     "problem": "页面上的说明性小字（如统计项下方的解释文字）看着发飘、读不清，但肉眼判断不出到底合不合格。",
     "dead_ends": [
@@ -1588,6 +1743,7 @@
       "serialization",
       "tooling"
     ],
+    "confidence": "A",
     "model": "Python + PyYAML",
     "problem": "渲染配方 .md 的 YAML frontmatter 时，为图省事用字符串拼接（f-string / 手拼 key: value），结果 dead_ends[].failure 里出现 ImportError: No module named yaml 这种带冒号的值，被 YAML 当成 ImportError 键、No module named yaml 值，整段 frontmatter 解析错位；rebuild 回读报错，新配方没进索引。",
     "dead_ends": [
