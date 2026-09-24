@@ -4,8 +4,9 @@
    跑法： node tests/search-baseline.js   （或 npm test）
    退出码：任何一条 FAIL → 1（可直接挂 CI）
 
-   基线（2026-09-24 实测，37 条）：
-     正例命中 6/6 ｜ 反例拒绝 3/3 ｜ 单字符/纯虚词 0 命中 ｜ 元配方不抢 Top1
+   基线（2026-09-24 首测于 37 条库，2026-09-25 于 42 条库复测）：
+     正例命中 4/4 ｜ 反例拒绝 1/1 ｜ 单字符/纯虚词 0 命中 ｜ 元配方不抢 Top1
+     （用例数为合并后的 5 条，首测时的 6/3 是拆分前的口径）
    改动 lib/search.js 后若此测试变红，说明排序/命中质量回退了。
    ============================================================ */
 
@@ -13,7 +14,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
-  searchRecipes, tokenize, listTags, GROUPS,
+  searchRecipes, tokenize, listTags, GROUPS, hayOf,
   HINT_NO_MATCH, HINT_TOO_SHORT, HINT_NO_KEYWORD, STOPWORDS, MIN_TOKEN_LEN,
 } from "../lib/search.js";
 
@@ -140,7 +141,14 @@ for (const c of [
 section("二·C、英文词边界（缺陷 E）");
 {
   const ipRes = searchRecipes(RECIPES, "ip", { limit: 20 });
-  check("查「ip」不再命中含 gzip 的配方（要求词首边界）", ipRes.matched === 0, `matched=${ipRes.matched}`);
+  /* 守「词内不得命中」这条不变量，而不是 matched 必须为 0：
+     库里若真有独立出现的 ip（例如讲网络阻断的配方），那是合理命中；
+     缺陷 E 的伤害是 ip 命中了 gzip 内部的 ip，与本断言不是一回事。 */
+  const wordInside = ipRes.results.filter(
+    (x) => !/(^|[^a-z0-9])ip([^a-z0-9]|$)/.test(hayOf(x.recipe).toLowerCase()),
+  );
+  check("查「ip」不再靠词内命中（要求词首边界）", wordInside.length === 0,
+    wordInside.map((x) => x.recipe.id).join(",") || `matched=${ipRes.matched}`);
   const gz = searchRecipes(RECIPES, "gzip", { limit: 20 });
   check("查「gzip」仍能正常命中", gz.matched >= 1, `matched=${gz.matched}`);
   const enc = searchRecipes(RECIPES, "encoding", { limit: 20 });

@@ -95,9 +95,9 @@ try {
   const tools = list.result?.tools || [];
   section("二、工具列表");
   console.log("      工具:", tools.map((t) => t.name).join(" / "));
-  check("返回 3 个工具", tools.length === 3, `实际 ${tools.length}`);
-  check("含 search_recipes / get_recipe / list_tags",
-    ["search_recipes", "get_recipe", "list_tags"].every((n) => tools.some((t) => t.name === n)));
+  check("返回 4 个工具（含 list_quarantine）", tools.length === 4, `实际 ${tools.length}`);
+  check("含 search_recipes / get_recipe / list_tags / list_quarantine",
+    ["search_recipes", "get_recipe", "list_tags", "list_quarantine"].every((n) => tools.some((t) => t.name === n)));
 
   const sr = tools.find((t) => t.name === "search_recipes");
   check("search_recipes.inputSchema 合法（type=object + required=query）",
@@ -164,6 +164,70 @@ try {
   check("list_tags 返回领域分类且计数之和 == total",
     (ltPayload.groups || []).filter((g) => g.key !== "all").reduce((a, g) => a + g.count, 0) === ltPayload.total,
     JSON.stringify(ltPayload.groups));
+
+  /* ---------------- 翻页（offset / has_more / returned）---------------- */
+  section("四之贰、翻页防卡死（R-10 讨论落地，2026-09-24）");
+  const pgQ = "爬虫";
+  const pg0 = await s.call("tools/call", { name: "search_recipes", arguments: { query: pgQ, limit: 5, offset: 0 } });
+  const pg0p = JSON.parse(pg0.result.content[0].text);
+  check("翻页 query 命中足够多（matched≥6）", pg0p.matched >= 6, `matched=${pg0p.matched}`);
+  check("第1页 returned=5", pg0p.returned === 5, `returned=${pg0p.returned}`);
+  check("第1页 has_more=true（后面还有）", pg0p.has_more === true, `has_more=${pg0p.has_more}`);
+  const pg1 = await s.call("tools/call", { name: "search_recipes", arguments: { query: pgQ, limit: 5, offset: 5 } });
+  const pg1p = JSON.parse(pg1.result.content[0].text);
+  check("第2页 returned 合理（min(5, 余量)）", pg1p.returned === Math.min(5, pg0p.matched - 5), `returned=${pg1p.returned}`);
+  check("第2页 has_more 与余量一致", pg1p.has_more === (pg0p.matched > 10), `has_more=${pg1p.has_more}`);
+  const ids0 = pg0p.results.map((r) => r.id);
+  const ids1 = pg1p.results.map((r) => r.id);
+  check("两页 id 不重叠（第 6 条起真能取到，不卡死）", ids0.filter((id) => ids1.includes(id)).length === 0);
+  const pgX = await s.call("tools/call", { name: "search_recipes", arguments: { query: pgQ, limit: 5, offset: 40 } });
+  const pgXp = JSON.parse(pgX.result.content[0].text);
+  check("合法但超结果的 offset → has_more=false 且 returned=0（不卡死、不报错）", pgXp.has_more === false && pgXp.returned === 0, `returned=${pgXp.returned}`);
+
+  /* 回归（2026-09-25）：offset 上限原本写死成 40（"库当前 40 条"）。
+     库涨到 42 条时它还卡在边界上，再涨就会把最后一页吞掉 —— 表现是
+     「翻到某一页后 has_more 一直 false，但 matched 还有没拿到的」。
+     这里不写死任何上限数字，直接验「一路翻到底能拿到全部命中」。 */
+  const seen = new Set();
+  let off = 0;
+  for (let guard = 0; guard < 200; guard++) {
+    const pg = await s.call("tools/call", { name: "search_recipes", arguments: { query: pgQ, limit: 5, offset: off } });
+    if (pg.error) break; // 上限被写死时会在这里报 -32602，直接中断走下面的失败断言
+    const p = JSON.parse(pg.result.content[0].text);
+    p.results.forEach((r) => seen.add(r.id));
+    if (!p.has_more) break;
+    off += 5;
+  }
+  check("一路翻到底能拿到全部命中（offset 上限没把尾巴吞掉）", seen.size === pg0p.matched, `翻到 ${seen.size} 条 / 命中 ${pg0p.matched} 条`);
+
+  const eOff = await s.call("tools/call", { name: "search_recipes", arguments: { query: "x", offset: -1 } });
+  check("offset 负数 → -32602", eOff.error?.code === -32602);
+  const eOff2 = await s.call("tools/call", { name: "search_recipes", arguments: { query: "x", offset: 999 } });
+  check("offset 超出可翻范围 → -32602", eOff2.error?.code === -32602);
+
+  /* ---------------- L3 隔离与审计（R-10，2026-09-24 落地）---------------- */
+  section("四之叁、L3 隔离与审计（R-10）");
+  const l3 = await s.call("tools/call", { name: "search_recipes", arguments: { query: "爬虫被封 IP 了", limit: 5 } });
+  const l3p = JSON.parse(l3.result.content[0].text);
+  check("search 返回带 confidence 字段", l3p.results.every((r) => typeof r.confidence === "string"), JSON.stringify(l3p.results[0]?.confidence));
+  check("search 返回带 quarantined_count", typeof l3p.quarantined_count === "number", `=${l3p.quarantined_count}`);
+  check("真实库无 C → quarantined_count=0", l3p.quarantined_count === 0, `=${l3p.quarantined_count}`);
+  const l3q = await s.call("tools/call", { name: "search_recipes", arguments: { query: "爬虫被封 IP 了", include_quarantine: true } });
+  check("include_quarantine=true 被接受（非 -32602）", !l3q.error, JSON.stringify(l3q.error));
+  const l3qp = JSON.parse(l3q.result.content[0].text);
+  check("include_quarantine=true 仍带 quarantined_count", typeof l3qp.quarantined_count === "number");
+  const eQ = await s.call("tools/call", { name: "search_recipes", arguments: { query: "x", include_quarantine: "yes" } });
+  check("include_quarantine 非布尔 → -32602", eQ.error?.code === -32602);
+  const lq = await s.call("tools/call", { name: "list_quarantine", arguments: {} });
+  check("list_quarantine 工具存在且可调用", !lq.error, JSON.stringify(lq.error));
+  const lqp = JSON.parse(lq.result.content[0].text);
+  check("list_quarantine 返回 total 与 items", typeof lqp.total === "number" && Array.isArray(lqp.items), JSON.stringify(Object.keys(lqp)));
+  check("真实库 list_quarantine total=0（无 C 级）", lqp.total === 0, `=${lqp.total}`);
+  const tl = await s.call("tools/list", {});
+  const tlNames = (tl.result?.tools || []).map((t) => t.name);
+  check("tools/list 含 list_quarantine", tlNames.includes("list_quarantine"), tlNames.join(","));
+  const srSchema = (tl.result?.tools || []).find((t) => t.name === "search_recipes");
+  check("search_recipes schema 含 include_quarantine", srSchema?.inputSchema?.properties?.include_quarantine !== undefined);
 
   /* ---------------- 参数校验 ---------------- */
   section("五、参数校验与错误约定（§7.3 AC-5）");
