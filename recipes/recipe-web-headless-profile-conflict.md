@@ -4,6 +4,7 @@ title: 连续跑多个 headless 实例报 exit 23：用户数据目录被抢占
 tags:
 - tooling
 - headless
+confidence: A
 model: Deepseek-V4.1-Flash
 problem: 连续截两张图，第二张报 exit code 23、截图文件根本不生成。
 dead_ends:

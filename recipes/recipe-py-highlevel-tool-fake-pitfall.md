@@ -4,6 +4,7 @@ title: 用高层抓取工具产出的坑多半是假的：11 条配方被整批�
 tags:
 - scrape
 - tooling
+confidence: A
 model: Deepseek-V4.1-Flash
 problem: 用高层 WebFetch 工具批量抓公开页来生成「采集踩坑」配方。产出的 11 条结构完整、看着也像模像样，但复盘时发现它们根本不能代表真实采集场景。
 dead_ends:

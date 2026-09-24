@@ -4,6 +4,7 @@ title: Content-Encoding 静默解压：requests 已自动解 gzip/deflate，手�
 tags:
 - encoding
 - scrape
+confidence: A
 model: Agent+Python requests
 problem: '抓某公开 HTTP 测试服务返回的压缩响应(标准回显端点，路径如 /gzip、/deflate、/brotli)时，看到响应头 Content-Encoding:
   gzip，直觉认为『body 是压缩的、得自己解压』，于是对 r.content 调 gzip.decompress()——结果直接抛异常。真相是 requests

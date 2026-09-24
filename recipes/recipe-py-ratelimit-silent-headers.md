@@ -6,6 +6,7 @@ tags:
 - scrape
 - rate-limit
 - timing
+confidence: A
 model: Agent+Python requests
 problem: 判断『连续抓取会不会被限流』时，最容易只看 HTTP 状态：连续 15-18 次请求全部 200、没有 429，就下结论『该站不限流』。真跑发现这个结论不可靠——一个站用响应头静默计数限流（耗尽才拒绝），另一个站前
   16 次全被 CDN 缓存挡下、根本没打到源站，状态码和耗时都毫无信息量。

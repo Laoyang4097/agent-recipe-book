@@ -6,6 +6,7 @@ tags:
 - ci
 - auth
 - tooling
+confidence: A
 model: Git 2.x + GitHub fine-grained PAT
 problem: '用 fine-grained PAT 推 GitHub 时，想用 git -c http.extraheader=Authorization:
   Bearer <token> 免输凭证，结果 git 仍要 username、推送失败。后来发现 git 的 smart-HTTP 走 Basic Auth，Bearer

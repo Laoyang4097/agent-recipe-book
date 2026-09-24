@@ -3,6 +3,7 @@ id: recipe-web-thumbnail-misjudge
 title: 缩略图看走眼：同一现象连续误判三次「移动端文字被裁」
 tags:
 - web-verify
+confidence: A
 model: Deepseek-V4.1-Flash
 problem: 从截图缩略图看，移动端副标题、胶囊像是被右边框切断，连续三轮回合都据此改了代码。
 dead_ends:

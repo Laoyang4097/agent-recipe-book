@@ -5,6 +5,7 @@ tags:
 - yaml
 - serialization
 - tooling
+confidence: A
 model: Python + PyYAML
 problem: '渲染配方 .md 的 YAML frontmatter 时，为图省事用字符串拼接（f-string / 手拼 key: value），结果 dead_ends[].failure
   里出现 ImportError: No module named yaml 这种带冒号的值，被 YAML 当成 ImportError 键、No module

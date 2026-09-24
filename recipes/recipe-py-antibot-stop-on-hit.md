@@ -5,6 +5,7 @@ tags:
 - anti-bot
 - scrape
 - headless
+confidence: A
 model: Agent+Python requests
 problem: 用 requests 抓两个公开反爬站（某 SaaS 评测站、某招聘点评站），默认 python-requests UA 单次请求即被拦截：一个返回
   403 + JS/DataDome 挑战骨架，一个返回 403 纯文本 Forbidden。此时最大误区是『换个 UA / 加代理 / 上打码』继续硬推——正确做法是识别反爬信号后立即停止该目标，把它记为不可抓取的

@@ -4,6 +4,7 @@ title: requests 抓某新闻门户首页：导航/平台入口/广告噪声占�
 tags:
 - scrape
 - selector
+confidence: A
 model: Agent+Python requests
 problem: 用 requests 抓某新闻门户首页想提取文章标题，结果一个页面上 649 个链接里只有约 30% 像文章，大量导航、平台入口、广告位、多频道入口和重复模板混在一起，用正则或『抓所有
   <a>』根本分不出正文。

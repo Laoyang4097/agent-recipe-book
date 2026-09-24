@@ -4,6 +4,7 @@ title: 分页靠路径数字：?page=2 被静默忽略仍返回第1页，跨页�
 tags:
 - pagination
 - scrape
+confidence: A
 model: Agent+Python requests
 problem: 用 requests 抓某新闻门户『滚动新闻』列表翻 3 页时发现：改用 ?page=2 这类查询参数后服务端仍返回 HTTP 200、没有任何报错，内容却和第
   1 页一模一样——分页被静默忽略。正确分页其实靠 URL 路径里的数字（/scroll-news/news1.html…newsN.html）。

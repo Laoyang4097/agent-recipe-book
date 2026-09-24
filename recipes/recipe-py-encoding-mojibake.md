@@ -5,6 +5,7 @@ title: requests 抓中文站默认 r.encoding=ISO-8859-1 致乱码，用 apparen
 tags:
 - encoding
 - scrape
+confidence: A
 model: Agent+Python requests
 problem: 用 requests 抓某政务站首页，r.text 取回的中文全是 'ä¸æ¿åºç½' 一类乱码；而 r.encoding 默认给出 ISO-8859-1，页面实际是
   UTF-8。坑点：当响应头 Content-Type 只有 'text/html'、不带 charset 时，requests 按 RFC 回退 ISO-8859-1，r.text

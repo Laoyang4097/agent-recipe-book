@@ -5,6 +5,7 @@ tags:
 - gh-pages
 - tooling
 - ci
+confidence: A
 model: Deepseek-V4.1-Flash
 problem: 站点文件已推上 main，想用 API 顺手把 GitHub Pages 打开、省掉手动操作，结果被拒。
 dead_ends:

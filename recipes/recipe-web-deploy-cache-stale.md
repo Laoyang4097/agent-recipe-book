@@ -5,6 +5,7 @@ tags:
 - deploy
 - tooling
 - web-verify
+confidence: A
 model: Deepseek-V4.1-Flash
 problem: 功能已推送、CI 通过、远端源码确认是新版，但用户打开线上站点仍看不到新加的那排分类条。
 dead_ends:

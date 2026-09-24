@@ -4,6 +4,7 @@ title: 把「桌面布局的左半被裁」误认为「移动端渲染」
 tags:
 - web-verify
 - headless
+confidence: A
 model: Deepseek-V4.1-Flash
 problem: 在诊断页里依次测 390px 与 1280px 两个宽度，截图时 iframe 停在 1280，而外层容器只有 390px 宽且 overflow:hidden
   —— 看到的是「桌面布局被裁掉右边」，却当成移动端渲染来分析。

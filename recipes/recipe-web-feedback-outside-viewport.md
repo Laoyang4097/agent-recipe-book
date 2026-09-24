@@ -4,6 +4,7 @@ title: 搜索结果在视口外且无即时反馈：用户以为按钮坏了
 tags:
 - frontend
 - ux
+confidence: A
 model: Deepseek-V4.1-Flash
 problem: 搜索框在页面上部、结果列表在页面下部，点检索后页面纹丝不动，使用者判断「按钮没反应」，必须手动往下翻才发现筛选已生效。
 dead_ends:

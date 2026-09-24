@@ -4,6 +4,7 @@ title: 把拍脑袋的估计当结论写进文档 —— 20 分钟能测出来�
 tags:
 - estimation
 - verify-before-claim
+confidence: A
 model: Deepseek-V4.1-Flash
 problem: 在设计文档里写下「配方超过 1000 条就该换检索方案」。这是我凭经验估的阈值，却写成了结论句 —— 读者（包括未来的自己）不会怀疑它。
 dead_ends:

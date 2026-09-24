@@ -3,6 +3,7 @@ id: recipe-web-dark-block-patchwork
 title: 白底页面上硬贴一块深色搜索框：像补丁，不像设计
 tags:
 - design-system
+confidence: A
 model: Deepseek-V4.1-Flash
 problem: 为了制造视觉焦点，在纯白页面上放了一个深色圆角搜索框。单看很酷，整体却像贴了块膏药，与页面气质割裂。
 dead_ends:

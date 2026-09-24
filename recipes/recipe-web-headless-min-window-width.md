@@ -5,6 +5,7 @@ tags:
 - web-verify
 - headless
 - screenshot
+confidence: A
 model: Deepseek-V4.1-Flash
 problem: 用 Edge/Chrome headless 的 --window-size=390,1000 截移动端图做响应式验证，看到的布局与真机不符，据此误判「移动端横向溢出」并白改了两轮
   CSS。

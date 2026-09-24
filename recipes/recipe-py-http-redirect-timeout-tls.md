@@ -5,6 +5,7 @@ tags:
 - scrape
 - timing
 - session
+confidence: A
 model: Agent+Python requests
 problem: requests 把很多 HTTP 细节藏了起来，导致对『重定向/超时/压缩/TLS/连接复用』的行为判断出错：以为不跟随重定向能拿到内容（实际拿到
   0 字节）、以为超时只有一种（实际连超时与读超时是两回事）、以为 Connection 头能证明连接复用（实测取不到）。

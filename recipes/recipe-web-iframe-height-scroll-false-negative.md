@@ -4,6 +4,7 @@ title: iframe 高度≥内容高度时测不到滚动：scrollY 恒为 0 的假�
 tags:
 - web-verify
 - headless
+confidence: A
 model: Deepseek-V4.1-Flash
 problem: 验证「点检索会不会滚动到结果区」，注入脚本报告 scrollY=0 未滚动，差点去改产品代码。
 dead_ends:

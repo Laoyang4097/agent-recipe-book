@@ -4,6 +4,7 @@ title: 提取文本忘 unescape：&#39;/&amp;/&rarr; 原样入库，手写 repla
 tags:
 - selector
 - encoding
+confidence: A
 model: Agent+Python requests
 problem: 抓某公开引用练习站做结构化抽取时，用正则/HTMLParser 取到标签之间的文本后直接入库，结果字段里带着 HTML 实体：同一页出现 &#39;
   共 4 次、&rarr; 1 次，正文里的撇号、箭头都以实体形式存进了 JSON。如果为了『省事』手写 replace 链清洗，顺序写错还会把 &amp;lt;

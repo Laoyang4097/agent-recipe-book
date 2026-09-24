@@ -4,6 +4,7 @@ title: 次级灰字对比度只有 3.06:1：看着「还行」实则不达 WCAG 
 tags:
 - design-system
 - a11y
+confidence: A
 model: Deepseek-V4.1-Flash
 problem: 页面上的说明性小字（如统计项下方的解释文字）看着发飘、读不清，但肉眼判断不出到底合不合格。
 dead_ends:

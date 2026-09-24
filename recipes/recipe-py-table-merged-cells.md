@@ -4,6 +4,7 @@ title: requests 解析含 rowspan/colspan 的表格：每行单元格数参差 [
 tags:
 - scrape
 - selector
+confidence: A
 model: Agent+Python requests
 problem: 抓含合并单元格的公开表格后，按『每个 <tr> 的 <td> 数=列数』直接取数会错位：多行表头 + rowspan/colspan 让各行单元格数不一致，且部分表的
   tbody 为空（数据靠 JS 填充），照常解析只能拿到表头。

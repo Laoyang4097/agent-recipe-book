@@ -4,6 +4,7 @@ title: requests 抓某短视频站首页：200 却返回 <body></body>，正文 
 tags:
 - scrape
 - headless
+confidence: A
 model: Agent+Python requests
 problem: 用 requests 抓某短视频站（SPA）公开首页，拿到了 200 和 72KB HTML，但去掉标签后正文字符为 0，页面上所有内容（推荐流/视频/作者/评论）都不在静态
   HTML 中，正文靠 JS 渲染，requests 只能拿到空壳。

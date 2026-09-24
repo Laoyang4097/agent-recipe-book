@@ -4,6 +4,7 @@ title: requests 默认 UA 遭差异对待：同 200 却 290 字符 vs 17626 字�
 tags:
 - anti-bot
 - scrape
+confidence: A
 model: Agent+Python requests
 problem: 用 requests 默认 UA（python-requests/2.34.2）抓公开页，站方按 UA 差异处理：同一搜索站同为 200 却返回被裁剪的骨架页；问答站直接
   403 JSON；短视频站 444；而有的站（代码托管）对 UA 完全不敏感。只看 status 会把残缺页当成功。

@@ -4,6 +4,7 @@ title: bash heredoc 里的嵌套引号会把脚本绞碎
 tags:
 - shell
 - tooling
+confidence: A
 model: Deepseek-V4.1-Flash
 problem: 在 bash 里用 heredoc 把一段 Python 脚本喂给解释器执行，脚本里有引号、模板字符串与 f-string，执行时报语法错误或内容被
   shell 提前展开。

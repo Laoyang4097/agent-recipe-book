@@ -3,6 +3,7 @@ id: recipe-web-measure-race-condition
 title: 测量竞态：元素在 1500ms 移除，我恰好在 1500ms 测量
 tags:
 - web-verify
+confidence: A
 model: Deepseek-V4.1-Flash
 problem: 验证「滚动到结果区后落点高亮是否触发」，报告 flash class = false，看起来功能没生效。
 dead_ends:

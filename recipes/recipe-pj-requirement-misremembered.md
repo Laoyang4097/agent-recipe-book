@@ -4,6 +4,7 @@ title: 把主办方要求记错，按「常识」排期 —— 差点白耗 2-3 
 tags:
 - planning
 - verify-before-claim
+confidence: A
 model: Deepseek-V4.1-Flash
 problem: 为一项 14 天截止的参赛做排期。我按「比赛一般都要交演示视频」的常识，把「录屏 Demo」排成了第二里程碑的主项（预估 2-3 天）。用户把赛程原文贴出来后重读才发现：2
   分钟 Demo 视频是**决赛**要求，初赛只需说明书 PDF + 可选附件 —— 录屏在初赛只是「可选附件」里的一个选项。

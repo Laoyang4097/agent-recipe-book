@@ -8,6 +8,7 @@ tags:
 - workbuddy
 - yaml
 - ci-cd
+confidence: A
 model: Agent+managed Python 3.13.12 (WorkBuddy 沙箱)
 problem: 要在 WorkBuddy 沙箱里跑一个 Python 脚本（项目里的 api/ingest.py，需要 pyyaml 解析 frontmatter），并把改动提交推到
   GitHub。结果连踩几个环境坑：脚本跑不起来、commit 被拒、路径解析错位、JSON 序列化崩。
@@ -30,6 +31,15 @@ dead_ends:
   duration: 5min
   early_signal: 'YAML 把 `created_at: 2026-09-22` 解析成 date 对象，json 无法直接序列化；render/parse
     后给 json.dump 加 default=str 兜底'
+- attempt: 写了个本地静态服务分发文件，用 path.join 拼好路径后和代码里硬写的正斜杠前缀比较
+  failure: 'path.join 产出的是反斜杠，和正斜杠前缀做 startsWith 恒为 false → 静态服务对所有路径返回
+    403，页面一片空白'
+  duration: 20min
+  early_signal: 'Windows 上路径分隔符是反斜杠；比较路径前两侧都过一遍 path.resolve，或统一用 path.sep'
+- attempt: 往补丁脚本第一行写 `/* 说明 */` 注释（沿用了写 JS 的习惯）
+  failure: 'SyntaxError，补丁整段没生效。而我没看到报错就当它生效了，差点漏进提交'
+  duration: 5min
+  early_signal: 'Python 只有 # 注释、没有块注释；改完补丁必须回读目标文件，确认内容真的变了'
 solution: ① 建隔离 venv 装依赖：`python -m venv .../envs/default && .../Scripts/pip install
   pyyaml`；② 给本仓库设局部 git 身份 `git config user.name/user.email`（仅本仓库，不污染全局）；③ 所有脚本调用用绝对路径或先
   `cd` 到仓库根；④ 在 json.dump 加 `default=str` 兜底 YAML 日期对象。最终 `ingest.py rebuild` 正常生成

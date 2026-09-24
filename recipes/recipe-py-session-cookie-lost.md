@@ -5,6 +5,7 @@ title: requests.get 之间 cookie 静默丢失：Set-Cookie 挂在 302 跳上、
 tags:
 - session
 - scrape
+confidence: A
 model: Agent+Python requests
 problem: '抓某公开 HTTP 测试服务时，先请求一个『设置 cookie 并 302 跳到回显页』的标准回显端点(路径如 /cookies/set)，再用
   requests.get 单独请求回显端点(/cookies)想读回 cookie，结果拿到空对象 {''cookies'': {}}。直觉以为『requests

@@ -5,6 +5,7 @@ tags:
 - git
 - tooling
 - ci
+confidence: A
 model: Deepseek-V4.1-Flash
 problem: 用 Git Data API 直接向远端提交后，本地 git status 一直显示领先远端若干个提交，看起来像「还有东西没推上去」。
 dead_ends:

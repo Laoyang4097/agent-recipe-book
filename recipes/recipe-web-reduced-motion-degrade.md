@@ -4,6 +4,7 @@ title: 平滑滚动变「闪现」：prefers-reduced-motion 把位移降级了
 tags:
 - frontend
 - a11y
+confidence: A
 model: Deepseek-V4.1-Flash
 problem: 用户反馈点检索后是「闪现」到列表、没有过渡，怀疑是动画写错。
 dead_ends:

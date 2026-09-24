@@ -4,6 +4,7 @@ title: input.focus() 与滚动到结果打架：焦点把视口又拽回搜索�
 tags:
 - frontend
 - ux
+confidence: A
 model: Deepseek-V4.1-Flash
 problem: 加上「点检索后滚动到结果区」之后，点击按钮却总是先跳回搜索框再滚动，行为互相拉扯。
 dead_ends:

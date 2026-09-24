@@ -4,6 +4,7 @@ title: 粒子背景+扫描线+均衡器：自己觉得科技感，实际是设�
 tags:
 - design-system
 - motion
+confidence: A
 model: Deepseek-V4.1-Flash
 problem: 初版为了「后现代科技感」加了粒子网络背景、顶部流动扫描线、品牌均衡器竖条，自我感觉良好，但整体观感像模板站。
 dead_ends:

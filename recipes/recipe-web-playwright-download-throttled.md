@@ -3,6 +3,7 @@ id: recipe-web-playwright-download-throttled
 title: Playwright 与 chromium 下载全被节流卡死：改用系统现成浏览器
 tags:
 - tooling
+confidence: A
 model: Deepseek-V4.1-Flash
 problem: 为了做网页截图验证，安装 Playwright：pip 轮子与 chromium 浏览器（约 150MB）全部下载超时，等了数分钟毫无进展。
 dead_ends:

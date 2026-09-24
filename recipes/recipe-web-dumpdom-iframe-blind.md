@@ -4,6 +4,7 @@ title: --dump-dom 只给主文档：iframe 里的内容一律拿不到
 tags:
 - web-verify
 - tooling
+confidence: A
 model: Deepseek-V4.1-Flash
 problem: 用无头浏览器 --dump-dom 做自动化校验，想读取被测页面的 DOM，结果输出里只有外层包装页，被测页面的内容全空。
 dead_ends:

@@ -5,6 +5,7 @@ tags:
 - frontend
 - css
 - search
+confidence: A
 model: Deepseek-V4.1-Flash
 problem: 卡片摘要用 JS slice 按字符硬切，结尾断在「默认 python-requests U...」这种怪位置；加搜索高亮后更严重 —— 命中词若落在视觉截断之外，用户看到一条结果却找不到它为什么在。
 dead_ends:

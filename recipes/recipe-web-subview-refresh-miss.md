@@ -4,6 +4,7 @@ title: 切换筛选维度后局部视图不刷新：render() 里漏了 renderTag
 tags:
 - frontend
 - tooling
+confidence: A
 model: Deepseek-V4.1-Flash
 problem: 给页面加了「领域分类」一级筛选后，点分类时卡片数量正确变了，但下方那排标签胶囊还是全部领域的，没跟着换。
 dead_ends:

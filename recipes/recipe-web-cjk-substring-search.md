@@ -5,6 +5,7 @@ tags:
 - frontend
 - search
 - encoding
+confidence: A
 model: Deepseek-V4.1-Flash
 problem: 用户按输入框提示输入「抓回来是乱码」，点检索毫无结果；用户以为是按钮坏了，实际是搜索本身搜不到东西。
 dead_ends:
