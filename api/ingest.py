@@ -35,6 +35,14 @@ EXP_JSON = os.path.join(REPO_ROOT, "api", "experiences.json")
 REQUIRED = ["id", "title", "tags", "model", "problem", "dead_ends", "solution", "status"]
 STATUS_ENUM = ["draft", "scrubbed", "published", "quarantined"]
 
+# 只有出现在 render_md 输出里的字段，投稿内容才会落进 .md frontmatter。
+# 曾因这里是手抄白名单、与渲染清单不同步，导致「投稿人填了、渲染时静默丢掉」——
+# 本库反复吃这个亏。现在它是唯一真值源，其它模块一律 import 它，不许再抄一份。
+RENDER_ORDER = ["id", "title", "tags", "model", "problem", "dead_ends",
+                "solution", "result", "retrospective", "skills", "harness",
+                "hardware", "agent_config", "verified", "status",
+                "contributor_id", "created_at"]
+
 # 简单脱敏正则（示例级；生产应由审计 Agent 增强）
 SENSITIVE_PATTERNS = [
     "api_key", "apikey", "token", "secret", "password",
@@ -79,11 +87,7 @@ def render_md(payload: dict) -> str:
     if "contributor" in p:
         del p["contributor"]
 
-    ordered = ["id", "title", "tags", "model", "problem", "dead_ends",
-               "solution", "result", "retrospective", "skills", "harness",
-               "hardware", "agent_config", "verified", "status",
-               "contributor_id", "created_at"]
-    fm = {k: p[k] for k in ordered if k in p}
+    fm = {k: p[k] for k in RENDER_ORDER if k in p}
     header = yaml.safe_dump(fm, allow_unicode=True, sort_keys=False,
                             default_flow_style=False)
     body = (
