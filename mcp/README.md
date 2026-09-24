@@ -116,6 +116,34 @@ Windows 上把 `/绝对路径/...` 换成盘符路径（如 `D:/项目/agent-rec
 
 ---
 
+## 自动上岗：让 Agent 一挂载就变「经验向导」（PRD §8）
+
+除了上面那份 `instructions`（工具层约束），本 Server 还固化了一份**角色培训手册**，通过 MCP 的 `prompts` 能力下发。
+任何支持 `prompts` 的客户端，一连上 `agent-recipe-book`，调用 `prompts/get(experience-guide)` 就能把 Agent **自动培训成经验向导**——
+效果与项目演示的「样板 Agent」完全一致（数据同源、规矩同款），**不用你手动把 prompt 贴给对方**。
+
+```bash
+# 客户端支持 prompts 时（推荐路径）：initialize 后自动拿到，无需手动
+# 也可显式取：
+printf '%s\n' \
+ '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{}}}' \
+ '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+ '{"jsonrpc":"2.0","id":2,"method":"prompts/list"}' \
+ '{"jsonrpc":"2.0","id":3,"method":"prompts/get","params":{"name":"experience-guide"}}' \
+ | node mcp/server.js
+```
+
+`experience-guide` 手册内含全部硬约束（C-1 只引用 / C-2 带编号 / C-3 不补充 / C-4 不猜测 / C-5 给死胡同 / C-6 附声明）与降级要求。
+`prompts/get` 还接受一个可选参数 `question`（用户当前卡点），填了会作为待回答问题注入模板。
+
+**双保险（客户端不支持 prompts 时）**：把 [`AGENT_PROMPT.md`](./AGENT_PROMPT.md) 整段复制为 Agent 的 system 指令，效果同样一致。
+无论哪条路，**知识在库里、规矩同款**，所以不同用户的 Agent 接入后效果一致。
+
+> 关键认知：MCP 里**没有**第二个 AI——它只是查询台。真正让效果一致的是「库里 42 条真实经验 + 同一份培训手册」。
+> 我们不在 Server 里内置 Agent 去接待对方，而是把「怎么干活的规矩」写成说明书随 MCP 下发。
+
+---
+
 ## 自测
 
 ```bash
@@ -133,11 +161,11 @@ printf '%s\n' \
  | node mcp/server.js
 ```
 
-实例回放（2026-09-24，37 条库）：
+实例回放（2026-09-25 实跑，42 条库；matched 数会随库规模变化，别照抄数字）：
 
 ```
 [id=1] initialize → protocolVersion=2024-11-05  serverInfo=agent-recipe-book
-[id=2] search_recipes「爬虫被封 IP 了」→ matched=12  同义词扩展=anti-bot,scrape
+[id=2] search_recipes「爬虫被封 IP 了」→ matched=13  同义词扩展=anti-bot,scrape
         · recipe-py-antibot-stop-on-hit
           score=6  tags=anti-bot,scrape,headless  死胡同 2 条
           首个死胡同: requests 默认 UA 单次 GET 某 SaaS 评测站首页（allow_redirects=True、timeout=12，不做任何伪装）

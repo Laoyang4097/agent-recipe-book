@@ -9,9 +9,11 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "node tests/search-baseline.js && node tests/mcp-smoke.js",
-    "test:search": "node tests/search-baseline.js",
+    "test": "node tests/search-baseline.js && node tests/search-pagination.test.js && node tests/search-quarantine.test.js && node tests/mcp-smoke.js && node tests/agent-prompts.test.js && node tests/verify-citations.test.js",
+    "test:search": "node tests/search-baseline.js && node tests/search-pagination.test.js",
     "test:mcp": "node tests/mcp-smoke.js",
+    "test:agent": "node tests/agent-prompts.test.js",
+    "test:verify": "node tests/verify-citations.test.js",
     "mcp": "node mcp/server.js"
   }
 }
