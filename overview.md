@@ -79,9 +79,16 @@ M1 让投稿进得来，M2 补的是「人怎么把池子里那条捞出来看�
 ## 验证
 
 ```
-npm test   →  exit=0，281 项断言全绿（M1 末为 253），recipes/ 与索引零污染
+npm test   →  exit=0，271 项断言全绿（9 个测试文件），recipes/ 与索引零污染
 rebuild    →  幂等无漂移
 ```
+
+> 📏 **断言数口径（2026-09-27 校准）**：以「各测试文件自报通过数之和」为准 = **271**。
+> 9 个文件：search-baseline 46 · search-pagination 14 · search-quarantine 26 · mcp-smoke 64 ·
+> agent-prompts 20 · write-mcp 25 · verify-citations 14 · ingest 20 · ingest-write 42。
+> 本文件曾写 281（来路不明）与 253（M1 期口径，当时少 3 套件），均与实跑不符。
+> **别用 `✅` 符号计数**（会把装饰性输出算进去，得 277），也**别用 grep 一行汇总**
+> （套件输出格式不统一，会漏）。
 
 ## M2 期发现的三个问题（都已修）
 
@@ -100,6 +107,9 @@ rebuild    →  幂等无漂移
 
 # 现场验收 · 2026-09-26
 
+> ⚠️ 本节是**当次验收的原始记录**，其中的 44 / 45 是**那一次运行时的库规模**。
+> 库后来涨到 53 条，这些数字不再代表现状——看现状请读 `README.md` 与 `api/experiences.json`。
+
 本轮开工第一件事是「真跑一遍」，不是「看测试绿了就交」。跑出来六幕，全过：
 
 | 幕 | 动作 | 实测结果 |
@@ -107,7 +117,7 @@ rebuild    →  幂等无漂移
 | 2 | `submit_recipe` 投一条真稿 | `ok=true`，落盘 `recipes/demo-gitbash-tmp-not-windows.md`，`status: quarantined` + `confidence: C`，贡献者 `anon-4af947`（匿名哈希） |
 | 3 | 主检索 / 隔离池双口径 | 主检索**搜不到**它；`list_quarantine` **能看到**它 —— 投稿 ≠ 公开落实了 |
 | 4 | 投一条 `solution` 带 `sk-` 形态密钥 | 拦下，未落盘，理由里命中词已打码成 `<redacted>` |
-| 5 | `promote_recipe(id, B)` | `status: published` + `confidence: B`，内容一字未改 |
+| 5 | `promote_recipe(id, confidence: B)` | `status: published` + `confidence: B`，内容一字未改 |
 | 6 | 命令行 `ingest.py rebuild` | 公开索引 44 → 45，检索**搜得到**它，隔离池**同时移出**（不重复可见） |
 | 收尾 | 删演示稿 + rebuild | `recipes/` 回到 44 条，零残留 |
 

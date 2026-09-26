@@ -28,7 +28,7 @@
 # 索引入口（llms.txt 规范）
 curl https://raw.githubusercontent.com/Laoyang4097/agent-recipe-book/main/llms.txt
 
-# 全量结构化数据：一次抓取即得全库（44 条完整 frontmatter）
+# 全量结构化数据：一次抓取即得全库（53 条完整 frontmatter）
 curl https://laoyang4097.github.io/agent-recipe-book/api/experiences.json
 
 # 单条配方示例（格式参考，非真实配方，位于 docs/examples/）

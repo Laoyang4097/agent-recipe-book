@@ -157,7 +157,7 @@ RECIPE_BOOK_WRITE=1 node mcp/server.js
 |---|---|---|
 | 1 | `list_quarantine` | 拿到待复核清单（`quarantined_count > 0` 就说明池里有货） |
 | 2 | `get_recipe` | 看完整内容。**别只看列表摘要**——四段死胡同是不是真走过弯路，只在正文里 |
-| 3 | `promote_recipe(id, "B" / "A" / "C")` | 放行 / 放行并加实测 / 驳回回隔离区 |
+| 3 | `promote_recipe(id, confidence: "B" / "A" / "C")` | 放行 / 放行并加实测 / 驳回回隔离区。参数名是 `confidence`，写成 `level` 会被 -32602 直接打回 |
 | 4 | `python api/ingest.py rebuild` | 让人点头这一环节的最后一步，**不能省** |
 
 第 3 步的门槛文案是给维护者看的原话，缺什么就直接说补什么：
@@ -199,7 +199,7 @@ printf '%s\n' \
 **双保险（客户端不支持 prompts 时）**：把 [`AGENT_PROMPT.md`](./AGENT_PROMPT.md) 整段复制为 Agent 的 system 指令，效果同样一致。
 无论哪条路，**知识在库里、规矩同款**，所以不同用户的 Agent 接入后效果一致。
 
-> 关键认知：MCP 里**没有**第二个 AI——它只是查询台。真正让效果一致的是「库里 44 条真实经验 + 同一份培训手册」。
+> 关键认知：MCP 里**没有**第二个 AI——它只是查询台。真正让效果一致的是「库里 53 条真实经验 + 同一份培训手册」。
 > 我们不在 Server 里内置 Agent 去接待对方，而是把「怎么干活的规矩」写成说明书随 MCP 下发。
 
 ---
