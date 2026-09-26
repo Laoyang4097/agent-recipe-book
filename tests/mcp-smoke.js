@@ -248,10 +248,17 @@ try {
   section("六、安全边界（§7.3 AC-6）");
   const WRITE_WORDS = ["write", "create", "update", "delete", "remove", "submit", "publish", "push", "ingest"];
   const offenders = tools.filter((t) => WRITE_WORDS.some((w) => t.name.toLowerCase().includes(w)));
-  check("工具列表内不存在任何写操作", offenders.length === 0, offenders.map((t) => t.name).join(","));
-  check("工具实现里不引用写入 API（无 fs.writeFile / child_process 调用）",
-    !/writeFile|appendFile|unlink|child_process|execSync/.test(
-      (await import("node:fs")).readFileSync(join(ROOT, "mcp", "server.js"), "utf8")));
+  check("默认态工具列表内不存在任何写操作", offenders.length === 0, offenders.map((t) => t.name).join(","));
+
+  /* 上面那条的补充：即便 RECIPE_BOOK_WRITE=1 开了写工具，落盘也必须由
+     api/ingest.py 子进程完成，Server 自己不许动 recipes/*.md 的字节。
+     frontmatter 的渲染真值在 Python 侧，Node 侧直接写迟早和 YAML 打架。
+     把这条写死在这里，是为了防止有人图省事用 fs 写文件绕开内核。 */
+  const src = (await import("node:fs")).readFileSync(join(ROOT, "mcp", "server.js"), "utf8");
+  check("Server 自身不直接写 recipes/*.md（一律经 ingest.py 子进程）",
+    !/writeFile|writeFileSync|appendFile|unlink|rmSync/.test(src));
+  check("写操作确实走 ingest.py 桥接（spawnSync + api/ingest.py）",
+    /spawnSync/.test(src) && /api\/ingest\.py/.test(src));
 } catch (err) {
   check("测试执行未抛异常", false, err.message);
 } finally {
