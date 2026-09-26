@@ -15,7 +15,7 @@ dead_ends:
   duration: 实现期
   early_signal: 同一个路径在 bash 和 python 里解析出两个地方
 solution: 改用两边都认的临时目录绝对路径，测试里统一用它，不再写 /tmp。
-result: 跨 Git Bash 与 Windows Python 的取数不再出错。
+result: 跨 Git Bash 与 Windows Python 的取数不再出错（双向实测）。
 retrospective: 凡是 bash 层与 Python 层共享的路径，都得挑「两边都认」的那个。Linux 的路径直觉在 Windows 上是要付费的。
 skills:
 - bash
@@ -24,7 +24,7 @@ skills:
 harness: tests/write-mcp.test.js 与 CLI 提交均走该目录
 hardware:
   os: win32 (Git Bash)
-verified: 实测双向可用
+verified: false
 status: published
 confidence: B
 contributor_id: anon-17753a

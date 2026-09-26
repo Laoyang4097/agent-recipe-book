@@ -242,8 +242,12 @@ def validate_submit(payload: dict) -> list:
                                  "reason": f"dead_ends[{i}] 缺子字段: {k}"})
     if isinstance(payload.get("tags"), list) and any(not str(t).strip() for t in payload["tags"]):
         errs.append({"field": "tags", "reason": "tags 里不能有空白字符串"})
-    # status / confidence 由服务端锁死。接受提交方指定 = 把「人在把关」这个承诺拆了。
-    for f in ("status", "confidence"):
+    # status / confidence / verified 由服务端与人工锁死。接受提交方指定 =
+    # 把「人在把关」这个承诺拆了。
+    # verified 尤其要紧：它是「这条结论有人真跑过、可复现」的标记，也是 A 档的门槛
+    # （见 promotion_errors）。若允许投稿方自带 verified: true，Agent 就能自称
+    # 「已验证」——门槛等于虚设。这和「提交方指定 status 让隔离失效」是同一类漏洞。
+    for f in ("status", "confidence", "verified"):
         if payload.get(f):
             errs.append({"field": f, "reason": f"{f} 由服务端按治理规则决定，提交方不需要传"})
     for hit in scan_sensitive(payload):
@@ -413,11 +417,18 @@ def promotion_errors(fm: dict, level: str) -> list:
                      "reason": f"脱敏复检没通过：{hit['reason']}。把真实值换成占位符再重试晋升"
                                f"（形如 sk-xxxx、AKIA-xxxx、C:\\Users\\<用户名>\\、192.168.x.x）。"
                                f"上下文：{hit['snippet']}"})
-    if level == "A" and not str(fm.get("result") or "").strip() and not str(fm.get("verified") or "").strip():
-        errs.append({"field": "result",
-                     "reason": "升 A 得有一条可验证的实测结论：result 或 verified 至少填一个"
-                               "（两个现在都是空的）。只有「我觉得好了」不算，否则 A 档就不值钱了。"
-                               "补写这两个字段后重新调 promote_recipe 即可，不用重建整条"})
+    # A 档门槛：verified 必须显式为 true。原先是「result 或 verified 非空」，两个毛病：
+    #   1) 类型含糊——verified 一度被写成描述文字（"现场验收六幕实测通过"），
+    #      将来任何 verified === true 的判断都会静默漏掉它们；
+    #   2) 门槛虚设——一句描述就能满足「非空」，等于绕过了升 A 的验收要求。
+    # 现在只认显式布尔 true：它是「这条结论有人真跑过、可复现」的唯一标记。
+    if level == "A" and fm.get("verified") is not True:
+        errs.append({"field": "verified",
+                     "reason": "升 A 要求 verified 显式为 true，现在不是。"
+                               "它是「有人真跑过一遍、结论可复现」的标记，投稿侧不能自带（会被拒），"
+                               "只能由人确认后亲手写：先把实测结论写进 result，"
+                               "再在 frontmatter 里把 verified 置 true，然后重调 promote_recipe。"
+                               "只有「我觉得好了」不算，否则 A 档就不值钱了"})
     return errs
 
 

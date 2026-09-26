@@ -16,7 +16,7 @@ dead_ends:
   duration: 实现期核对现状时撞见
   early_signal: 隔离态配方出现在主检索结果里，而 status 明明白白写着 quarantined
 solution: 把 confidence 补进 RENDER_ORDER。这个清单是渲染字段的唯一真值源，render_md 是唯一写入口——只要新增字段，第一件事是问它进清单了没有。
-result: 隔离双锁成立：投稿即 status=quarantined + confidence=C，两处同时改、同时写。晋升时两者一起改，回驳回隔离。
+result: 隔离双锁成立：投稿即 status=quarantined + confidence=C，两处同时改、同时写；隔离态不进主检索、只进 list_quarantine，rebuild 后仍成立。晋升时两者一起改，回驳回隔离。
 retrospective: 「单一真值源」这句话只在所有模块都真去 import 它时才成立。清单建了、字段加了，但渲染函数漏了一个——这类漂移不会报错，只会静默降级成默认值。
 skills:
 - python
@@ -24,7 +24,7 @@ skills:
 - 架构
 harness: api/ingest.py 的 RENDER_ORDER / render_md
 hardware: {}
-verified: 隔离态不进主检索、进 list_quarantine，rebuild 后仍成立
+verified: false
 status: published
 confidence: B
 contributor_id: anon-17753a

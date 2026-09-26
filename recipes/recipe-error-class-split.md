@@ -20,7 +20,7 @@ dead_ends:
   early_signal: 报错码是 -32602，但用户根本没有参数格式上的错
 solution: ① 含大写字符直接拒，报错点名「库内 id 形如 recipe-sqlite-wal」；② 错误分两类讲清楚：参数类型不合规 → -32602（改调用）；内容缺失
   / 撞 id / 跳级 / 脱敏命中 → 业务失败 errors[]（改内容）。
-result: 提交方指定 status / confidence 会被直接拒绝——服务端锁死的两项不让客户端指定。空串 title 落到内核报业务失败。
+result: 提交方指定 status / confidence / verified 会被直接拒绝——服务端锁死的三项不让客户端指定。大写 id 被拒。空串 title 落到内核报业务 errors[]，而非 -32602。
 retrospective: 错误分类告诉调用方「该改什么」。把两类修复动作混成一类，等于让对方在两条路里猜。静默归一最省事，也最不负责任。
 skills:
 - api-design
@@ -29,7 +29,7 @@ skills:
 - node
 harness: api/ingest.py 的 validate_submit / mcp/server.js 的 toolSubmitRecipe
 hardware: {}
-verified: 大写 id 被拒；空串 title 报业务 errors[] 而非 -32602
+verified: false
 status: published
 confidence: B
 contributor_id: anon-17753a

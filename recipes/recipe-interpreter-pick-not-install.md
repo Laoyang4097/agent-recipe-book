@@ -38,7 +38,7 @@ hardware:
   python: 3.13.12 managed + venv（两个都能叫 python）
   os: win32 (Git Bash)
 agent_config: RECIPE_BOOK_WRITE=1 开写闸；RECIPE_BOOK_PYTHON 可强制指定解释器
-verified: 现场验收六幕实测通过，不含推断
+verified: false
 status: published
 confidence: B
 contributor_id: anon-17753a

@@ -173,6 +173,16 @@ def t2_submit_validation():
     except ingest.WriteError as e:
         check("T2f status 不接受提交方指定", "status" in fields(e.errors), str(e.errors))
 
+    # T2g：verified 是 A 档门槛（promotion_errors 要求 verified is True）。
+    # 若允许投稿方自带 verified: true，Agent 就能自称「已验证」把门槛绕过去——
+    # 与 T2f 的「提交方指定 status」是同一类漏洞，必须一起堵。
+    try:
+        ingest.submit_recipe(full_payload(verified=True))
+        check("T2g verified 不接受提交方指定（A 档标记只能人工写）", False, "被放行了")
+    except ingest.WriteError as e:
+        check("T2g verified 不接受提交方指定（A 档标记只能人工写）",
+              "verified" in fields(e.errors), str(e.errors))
+
 
 # ---------------- 3. id 与撞车 ----------------
 def t3_id_rules():
@@ -256,10 +266,10 @@ def t5_promote():
 
     try:
         ingest.promote_recipe("recipe-mojibake", "A")
-        check("T5e 升 A 需实测证据（AC-6.3）", False, "没有 result 却放行了")
+        check("T5e 升 A 需 verified 显式为 true（AC-6.3）", False, "没有 verified 却放行了")
     except ingest.WriteError as e:
-        check("T5e 升 A 需实测证据并点名 result（AC-6.3）",
-              "result" in fields(e.errors), str(e.errors))
+        check("T5e 升 A 需 verified 显式为 true 并点名该字段（AC-6.3）",
+              "verified" in fields(e.errors), str(e.errors))
 
     p = full_payload(title="编码抓回来是乱码", id="recipe-mojibake-a", result="utf-8 重编后 100% 正确")
     ingest.submit_recipe(p)
@@ -269,8 +279,20 @@ def t5_promote():
     except ingest.WriteError as e:
         check("T5f 有实测结论也不能从 C 直接升 A", any("跳级" in x["reason"] for x in e.errors))
     ingest.promote_recipe("recipe-mojibake-a", "B")     # 按规矩先在 B 停一次
+    # T5g：result 写得再清楚也不够——A 档只认 verified 显式为 true。
+    # 这正是收紧门槛要防的事：一句文字描述曾经就能满足旧门槛的「非空」。
+    try:
+        ingest.promote_recipe("recipe-mojibake-a", "A")
+        check("T5g 有 result 但无 verified 仍不能升 A（AC-6.3）", False, "没有 verified 却放行了")
+    except ingest.WriteError as e:
+        check("T5g 有 result 但无 verified 仍不能升 A（AC-6.3）",
+              "verified" in fields(e.errors), str(e.errors))
+    # 人工复核后亲手写 verified: true —— 这是 A 档的唯一入口（投稿侧锁死了 verified）。
+    t = text_of("recipe-mojibake-a").replace("status: published", "verified: true\nstatus: published", 1)
+    with open(os.path.join(ingest.RECIPES_DIR, "recipe-mojibake-a.md"), "w", encoding="utf-8") as f:
+        f.write(t)
     r = ingest.promote_recipe("recipe-mojibake-a", "A")
-    check("T5g 经 B 中转后可升 A", r["confidence"] == "A", str(r))
+    check("T5g 人工置 verified 后可升 A（AC-6.3）", r["confidence"] == "A", str(r))
 
     r = ingest.promote_recipe("recipe-mojibake-a", "C")
     fm = ingest.parse_frontmatter(text_of("recipe-mojibake-a"))

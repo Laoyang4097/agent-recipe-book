@@ -19,7 +19,7 @@
       }
     ],
     "solution": "先把正文算成完整字符串 text = render_md(record)，再 open 落笔；渲染失败则一个字节都不碰。另外加一道 _roundtrip_ok 回读校验，不通过就删掉刚写的文件并报错。",
-    "result": "失败路径不留半成品；成功路径落盘内容可被原样读回。",
+    "result": "失败路径不留半成品（渲染异常时不产生任何文件、往返校验失败时删除残留）；成功路径落盘内容可被原样读回。",
     "retrospective": "原子性不是「写错了再删掉」，是「根本不让半成品存在」。截断与渲染的先后顺序，决定了异常时你是干净的还是烂的。",
     "skills": [
       "python",
@@ -27,7 +27,7 @@
     ],
     "harness": "api/ingest.py 的 _write_recipe",
     "hardware": {},
-    "verified": "渲染异常时不产生任何文件；往返校验失败时删除残留",
+    "verified": false,
     "status": "published",
     "confidence": "B",
     "contributor_id": "anon-17753a",
@@ -59,7 +59,7 @@
       }
     ],
     "solution": "① 含大写字符直接拒，报错点名「库内 id 形如 recipe-sqlite-wal」；② 错误分两类讲清楚：参数类型不合规 → -32602（改调用）；内容缺失 / 撞 id / 跳级 / 脱敏命中 → 业务失败 errors[]（改内容）。",
-    "result": "提交方指定 status / confidence 会被直接拒绝——服务端锁死的两项不让客户端指定。空串 title 落到内核报业务失败。",
+    "result": "提交方指定 status / confidence / verified 会被直接拒绝——服务端锁死的三项不让客户端指定。大写 id 被拒。空串 title 落到内核报业务 errors[]，而非 -32602。",
     "retrospective": "错误分类告诉调用方「该改什么」。把两类修复动作混成一类，等于让对方在两条路里猜。静默归一最省事，也最不负责任。",
     "skills": [
       "api-design",
@@ -69,7 +69,7 @@
     ],
     "harness": "api/ingest.py 的 validate_submit / mcp/server.js 的 toolSubmitRecipe",
     "hardware": {},
-    "verified": "大写 id 被拒；空串 title 报业务 errors[] 而非 -32602",
+    "verified": false,
     "status": "published",
     "confidence": "B",
     "contributor_id": "anon-17753a",
@@ -101,7 +101,7 @@
       }
     ],
     "solution": "① 关键词绝不出现在探针的 title 里，只放在 problem/body；② 定断言前先把 raw 分数打出来量一遍，确认弱命中确实弱；③ 选一个在真库里零命中的词做「全库无命中」探针。",
-    "result": "R-1..R-5 五条破例露头规则全部得到真实覆盖，25/25 通过。",
+    "result": "分数实测：弱命中 < 阈值、强命中 > 阈值、破例露头仅 Top1；R-1..R-5 五条规则全部得到真实覆盖，25/25 通过。",
     "retrospective": "假绿比红危险。红灯会逼你去看实现，绿灯让你以为看过了。凡是「该失败却一次就过」的断言，先怀疑测试自己。",
     "skills": [
       "测试",
@@ -110,7 +110,7 @@
     ],
     "harness": "tests/search-quarantine.test.js 的 R-1..R-5",
     "hardware": {},
-    "verified": "分数实测：弱命中 < 阈值，强命中 > 阈值，破例露头仅 Top1",
+    "verified": false,
     "status": "published",
     "confidence": "B",
     "contributor_id": "anon-17753a",
@@ -452,7 +452,7 @@
       "os": "win32 (Git Bash)"
     },
     "agent_config": "RECIPE_BOOK_WRITE=1 开写闸；RECIPE_BOOK_PYTHON 可强制指定解释器",
-    "verified": "现场验收六幕实测通过，不含推断",
+    "verified": false,
     "status": "published",
     "confidence": "B",
     "contributor_id": "anon-17753a",
@@ -1182,7 +1182,7 @@
       "验收",
       "回归"
     ],
-    "model": "Python 3.13 / 本仓库 recipes/ 44 条",
+    "model": "Python 3.13 / 本仓库 recipes/",
     "problem": "照 PRD 把 SENSITIVE_PATTERNS 接进 validate() 当闸门。接线前照例在真库上跑了一遍，结果 44 条现有配方里 5 条被误伤，其中 3 条（讲 PAT / token 怎么用）恰恰是讲凭据的——按原样当闸门，这 5 条永远升不了级。",
     "dead_ends": [
       {
@@ -1199,7 +1199,7 @@
       }
     ],
     "solution": "收紧的是「识别方式」不是「判断标准」：把裸关键词列表改成认凭据形态——键值赋值（键名后紧跟等号或冒号再接若干字符）、各家云厂商的密钥前缀与 Bearer 头、家目录绝对路径、内网 IP、内网域名。10.x 整段放行，只拦 192.168 与 172.16-31。改完在全库上复跑，零误伤。",
-    "result": "全库 44 条零误伤；10 类真实凭据形态全部拦下；讲原理的正常内容不误伤。",
+    "result": "全库零误伤；10 类真实凭据形态全部拦下；讲原理的正常内容不误伤。",
     "retrospective": "写「该拦什么」之前先量「会误伤多少」。规则没在真数据上跑过就接线，等于拿线上当实验场。误伤清单是最好的测试用例——它逼你回答「这条为什么要拦」。另：写这条配方时自己又连撞两脚。第一脚是 solution 里照抄了几种密钥前缀与家目录绝对路径，被自家规则拦下、不落盘，报错里的命中词还打成了打码标记——一道能拦住写它的人的红线，才算真接上了。第二脚更蠢：为了把正则写进 frontmatter 我给它套了单引号，以为单引号能保护反斜杠，结果 frontmatter 整个解析不了。实测下来 YAML 单引号只取消引号自身的转义对，其它反斜杠序列照样被解释成退格符一类不可打印字符，正解是写双反斜杠。",
     "skills": [
       "regex",
@@ -1208,9 +1208,9 @@
     ],
     "harness": "api/ingest.py validate() + api/ingest_write.test.py 的 T1a/T1b/T1c",
     "hardware": {
-      "corpus": "recipes/*.md 44 条"
+      "corpus": "recipes/*.md 全库"
     },
-    "verified": "全库零误伤 + 10 类真凭据全拦，both sides 实测",
+    "verified": false,
     "status": "published",
     "confidence": "B",
     "contributor_id": "anon-17753a",
@@ -1237,7 +1237,7 @@
       }
     ],
     "solution": "把 confidence 补进 RENDER_ORDER。这个清单是渲染字段的唯一真值源，render_md 是唯一写入口——只要新增字段，第一件事是问它进清单了没有。",
-    "result": "隔离双锁成立：投稿即 status=quarantined + confidence=C，两处同时改、同时写。晋升时两者一起改，回驳回隔离。",
+    "result": "隔离双锁成立：投稿即 status=quarantined + confidence=C，两处同时改、同时写；隔离态不进主检索、只进 list_quarantine，rebuild 后仍成立。晋升时两者一起改，回驳回隔离。",
     "retrospective": "「单一真值源」这句话只在所有模块都真去 import 它时才成立。清单建了、字段加了，但渲染函数漏了一个——这类漂移不会报错，只会静默降级成默认值。",
     "skills": [
       "python",
@@ -1246,7 +1246,7 @@
     ],
     "harness": "api/ingest.py 的 RENDER_ORDER / render_md",
     "hardware": {},
-    "verified": "隔离态不进主检索、进 list_quarantine，rebuild 后仍成立",
+    "verified": false,
     "status": "published",
     "confidence": "B",
     "contributor_id": "anon-17753a",
@@ -1312,7 +1312,7 @@
       }
     ],
     "solution": "改用两边都认的临时目录绝对路径，测试里统一用它，不再写 /tmp。",
-    "result": "跨 Git Bash 与 Windows Python 的取数不再出错。",
+    "result": "跨 Git Bash 与 Windows Python 的取数不再出错（双向实测）。",
     "retrospective": "凡是 bash 层与 Python 层共享的路径，都得挑「两边都认」的那个。Linux 的路径直觉在 Windows 上是要付费的。",
     "skills": [
       "bash",
@@ -1323,7 +1323,7 @@
     "hardware": {
       "os": "win32 (Git Bash)"
     },
-    "verified": "实测双向可用",
+    "verified": false,
     "status": "published",
     "confidence": "B",
     "contributor_id": "anon-17753a",
@@ -1349,7 +1349,7 @@
       }
     ],
     "solution": "单测直接打 promotion_errors()，绕开上游门禁单独验证这条分支：既要证明它还在守门，也不能因为从入口测不到就当它不存在。",
-    "result": "39/39 通过，晋升门槛每条分支都有断言守着。",
+    "result": "直接单测 promotion_errors() 各分支，均返回预期 field；晋升门槛每条分支都有断言守着。",
     "retrospective": "这正是当年 SENSITIVE_PATTERNS 写成死代码的同一个坑：规则写好了、没人调用、没人发现。凡是「上游已经拦了」才显得多余的分支，恰恰是最容易悄悄失效的地方——它是最后一道门，不是多余的那道。",
     "skills": [
       "测试",
@@ -1358,7 +1358,7 @@
     ],
     "harness": "tests/ingest_write.test.py 的 T5k/T5l/T5m",
     "hardware": {},
-    "verified": "直接单测 promotion_errors 各分支均返回预期 field",
+    "verified": false,
     "status": "published",
     "confidence": "B",
     "contributor_id": "anon-17753a",
@@ -1384,7 +1384,7 @@
       }
     ],
     "solution": "校验与赋值配对写：类型不合规就抛 -32602，合规就原样写进 payload，不留一个只校验不落值的分支。",
-    "result": "经 MCP 投稿与经 CLI 投稿走同一份载荷，行为一致。",
+    "result": "经 MCP 投稿与经 CLI 投稿走同一份载荷，行为一致；A-1 投稿成功入池，回执含 id / contributor_id / status / confidence。",
     "retrospective": "「校验」和「赋值」是同一个动作的两半。拆成两个分支写，中间那步就容易被漏掉——而漏掉它，报错还会伪装成用户的问题。",
     "skills": [
       "node",
@@ -1393,7 +1393,7 @@
     ],
     "harness": "mcp/server.js 的 toolSubmitRecipe",
     "hardware": {},
-    "verified": "A-1 经 MCP 投稿成功入池，回执含 id / contributor_id / status / confidence",
+    "verified": false,
     "status": "published",
     "confidence": "B",
     "contributor_id": "anon-17753a",

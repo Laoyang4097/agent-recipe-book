@@ -15,7 +15,7 @@ dead_ends:
   duration: 实现期当场命中
   early_signal: 客户端明明传了 tags，回执却说没传
 solution: 校验与赋值配对写：类型不合规就抛 -32602，合规就原样写进 payload，不留一个只校验不落值的分支。
-result: 经 MCP 投稿与经 CLI 投稿走同一份载荷，行为一致。
+result: 经 MCP 投稿与经 CLI 投稿走同一份载荷，行为一致；A-1 投稿成功入池，回执含 id / contributor_id / status / confidence。
 retrospective: 「校验」和「赋值」是同一个动作的两半。拆成两个分支写，中间那步就容易被漏掉——而漏掉它，报错还会伪装成用户的问题。
 skills:
 - node
@@ -23,7 +23,7 @@ skills:
 - 调试
 harness: mcp/server.js 的 toolSubmitRecipe
 hardware: {}
-verified: A-1 经 MCP 投稿成功入池，回执含 id / contributor_id / status / confidence
+verified: false
 status: published
 confidence: B
 contributor_id: anon-17753a

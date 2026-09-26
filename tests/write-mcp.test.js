@@ -180,8 +180,11 @@ try {
   check("A-12 死胡同四段齐全可升 B", r11.body && r11.body.confidence === "B"
     && r11.body.status === "published", JSON.stringify(r11.body));
   const r12 = await callTool(s, "promote_recipe", { id, confidence: "A" });
-  check("A-13 无实测结论升 A 被拒并点名 result",
-    (r12.body.errors || []).some((e) => e.field === "result"), JSON.stringify(r12.body));
+  // A 档门槛是 verified is True（不再是「result 或 verified 非空」）。
+  // 这条稿子经 MCP 投稿，verified 带不进来（submit 侧已锁，见 ingest_write 的 T2g），
+  // 所以要升 A 只能由人复核后手写 verified: true —— 在此之前必被拦。
+  check("A-13 未人工置 verified 升 A 被拒并点名 verified",
+    (r12.body.errors || []).some((e) => e.field === "verified"), JSON.stringify(r12.body));
 
   /* §5.7 闭环：想让一条存疑稿被正常检索到，正确路径是「晋升」，
      不是绕过隔离区、也不是直接改 status。这条把它完整走一遍。 */

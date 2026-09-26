@@ -16,14 +16,14 @@ dead_ends:
   early_signal: 磁盘上出现一个存在但内容为空的配方文件，全库文件数却没变
 solution: 先把正文算成完整字符串 text = render_md(record)，再 open 落笔；渲染失败则一个字节都不碰。另外加一道 _roundtrip_ok
   回读校验，不通过就删掉刚写的文件并报错。
-result: 失败路径不留半成品；成功路径落盘内容可被原样读回。
+result: 失败路径不留半成品（渲染异常时不产生任何文件、往返校验失败时删除残留）；成功路径落盘内容可被原样读回。
 retrospective: 原子性不是「写错了再删掉」，是「根本不让半成品存在」。截断与渲染的先后顺序，决定了异常时你是干净的还是烂的。
 skills:
 - python
 - 文件IO
 harness: api/ingest.py 的 _write_recipe
 hardware: {}
-verified: 渲染异常时不产生任何文件；往返校验失败时删除残留
+verified: false
 status: published
 confidence: B
 contributor_id: anon-17753a

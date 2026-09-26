@@ -15,7 +15,7 @@ dead_ends:
   duration: M2 加固期
   early_signal: 报错来自 submit 而不是 promote，日志里的函数名不对
 solution: 单测直接打 promotion_errors()，绕开上游门禁单独验证这条分支：既要证明它还在守门，也不能因为从入口测不到就当它不存在。
-result: 39/39 通过，晋升门槛每条分支都有断言守着。
+result: 直接单测 promotion_errors() 各分支，均返回预期 field；晋升门槛每条分支都有断言守着。
 retrospective: 这正是当年 SENSITIVE_PATTERNS 写成死代码的同一个坑：规则写好了、没人调用、没人发现。凡是「上游已经拦了」才显得多余的分支，恰恰是最容易悄悄失效的地方——它是最后一道门，不是多余的那道。
 skills:
 - 测试
@@ -23,7 +23,7 @@ skills:
 - 内核设计
 harness: tests/ingest_write.test.py 的 T5k/T5l/T5m
 hardware: {}
-verified: 直接单测 promotion_errors 各分支均返回预期 field
+verified: false
 status: published
 confidence: B
 contributor_id: anon-17753a

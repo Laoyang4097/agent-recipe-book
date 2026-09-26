@@ -19,7 +19,7 @@ dead_ends:
   early_signal: 「绝无此词」居然 matched=true
 solution: ① 关键词绝不出现在探针的 title 里，只放在 problem/body；② 定断言前先把 raw 分数打出来量一遍，确认弱命中确实弱；③
   选一个在真库里零命中的词做「全库无命中」探针。
-result: R-1..R-5 五条破例露头规则全部得到真实覆盖，25/25 通过。
+result: 分数实测：弱命中 < 阈值、强命中 > 阈值、破例露头仅 Top1；R-1..R-5 五条规则全部得到真实覆盖，25/25 通过。
 retrospective: 假绿比红危险。红灯会逼你去看实现，绿灯让你以为看过了。凡是「该失败却一次就过」的断言，先怀疑测试自己。
 skills:
 - 测试
@@ -27,7 +27,7 @@ skills:
 - 检索
 harness: tests/search-quarantine.test.js 的 R-1..R-5
 hardware: {}
-verified: 分数实测：弱命中 < 阈值，强命中 > 阈值，破例露头仅 Top1
+verified: false
 status: published
 confidence: B
 contributor_id: anon-17753a
