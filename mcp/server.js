@@ -5,7 +5,8 @@
    规格：PRD 增量 v1.2 §7（只读 MCP）+ §8（经验向导自动上岗：prompts）
    传输：stdio，newline-delimited JSON-RPC 2.0（不是 Content-Length 分帧）
    依赖：零第三方依赖（Node 标准库）；检索走 lib/search.js 共享内核
-   权限：**只读** —— 不暴露任何写入 / 删除工具
+   权限：默认**只读** —— 不暴露写入工具。
+       只有显式设 RECIPE_BOOK_WRITE=1 时，写工具才会出现在 tools/list（写侧内核在 api/ingest.py）
 
    设计要点（为什么这里没有第二个 AI）：
      一个 MCP 工具就是一次**函数调用**，不是对话。对方 Agent 传参数、我们回数据。
@@ -15,13 +16,18 @@
    用法：
      node mcp/server.js                    # 从 stdin 读 JSON-RPC，向 stdout 写
      RECIPE_BOOK_PATH=/path/to.json node mcp/server.js
+     RECIPE_BOOK_WRITE=1 node mcp/server.js   # 挂载写工具（默认不给）
+     RECIPE_BOOK_PYTHON=/path/to/python.exe node mcp/server.js  # 指定写侧内核的解释器
    ⚠️ stdout 只允许出现协议报文；一切日志走 stderr（否则会污染协议流）。
    ============================================================ */
 
 import { readFileSync, statSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
+import path from "node:path";
 import { searchRecipes, listTags, GROUPS, confidenceOf } from "../lib/search.js";
+import { pickPython, pyCandidates } from "../lib/pybin.js";
 
 /* ---------------- 常量 ---------------- */
 const SERVER_INFO = { name: "agent-recipe-book", version: "1.0.0" };
@@ -45,6 +51,71 @@ const HINT_NOT_FOUND = "没有这个 id。先用 search_recipes 检索，或用 
 const DATA_PATH =
   process.env.RECIPE_BOOK_PATH ||
   fileURLToPath(new URL("../api/experiences.json", import.meta.url));
+
+/* ---------------- 写权限开关（进程级） ----------------
+   写工具会写本机文件系统，绝不能因为「加了个功能」就默认开放。
+   默认关闭——现有的只读客户端与测试路径完全不受影响；
+   只有显式设 RECIPE_BOOK_WRITE=1，写工具才会出现在 tools/list 里。 */
+const WRITE_ENABLED = process.env.RECIPE_BOOK_WRITE === "1";
+
+/* ---------------- 与写侧内核的桥接 ----------------
+   校验、渲染、脱敏、晋升门槛全在 api/ingest.py，这里只做两件事：
+   参数类型把关，以及把内核的结构化结果翻译成 MCP 报文。
+   绝不在这里重写校验逻辑——本项目反复吃亏在「两份真值源」。 */
+const INGEST_PY = fileURLToPath(new URL("../api/ingest.py", import.meta.url));
+
+/* 解释器挑选：不能退回裸 `python` 就完事。
+   本机（以及多数 Windows 开发机）PATH 上的 `python` 常是不带 pyyaml 的 managed
+   解释器，带 pyyaml 的在另一个 venv 里。直接猜名字的话，写侧会 100% 失败，
+   而报错写着「未安装 pyyaml」——看着像让用户装依赖，其实是选错了解释器，
+   用户照着装一遍也解决不了。所以按「能 import yaml」筛，并打日志留痕。 */
+let _pyBin = undefined;
+function pythonBin() {
+  if (_pyBin) return _pyBin;
+  _pyBin = pickPython();
+  const ok = _pyBin !== (process.env.RECIPE_BOOK_PYTHON || process.env.PYTHON);
+  process.stderr.write(
+    `[agent-recipe-book] 写侧解释器：${_pyBin}${ok ? "" : "（注意：这是 PATH 直出，可能缺 pyyaml）"}\n`);
+  return _pyBin;
+}
+
+function runIngest(argv, stdinPayload) {
+  const py = pythonBin();
+  const r = spawnSync(py, [INGEST_PY, ...argv], {
+    input: stdinPayload === undefined ? undefined : JSON.stringify(stdinPayload),
+    encoding: "utf-8",
+    // Windows 默认控制台码是 GBK，不强制 UTF-8 会把中文报错打成一堆问号
+    env: { ...process.env, PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1" },
+    maxBuffer: 8 * 1024 * 1024,
+  });
+  if (r.error) {
+    throw new RpcError(-32603, `无法启动写侧内核（${py}）：${r.error.message}`);
+  }
+  const out = (r.stdout || "").trim().split("\n").filter(Boolean).pop();
+  let parsed = null;
+  try {
+    parsed = out ? JSON.parse(out) : null;
+  } catch {
+    parsed = null;
+  }
+  if (!parsed) {
+    // 没拿到结构化回报就不当成功——宁可报错，也不能让调用方以为投稿落了地
+    const tail = (r.stderr || "").trim().split("\n").slice(-2).join(" | ");
+    let msg = `写侧内核未返回结构化结果（exit=${r.status}）。${tail}`;
+    // 「未安装 pyyaml」多半不是真缺依赖，而是挑错了解释器。直说，省得用户去装一个用不上的包。
+    if (/pyyaml|YAMLError/i.test(r.stderr || "")) {
+      msg += ` 当前解释器：${py}。若它确实不带 pyyaml，用 RECIPE_BOOK_PYTHON 指定另一个；`
+           + `候选里有：${pyCandidates().slice(0, 4).join(" / ")}`;
+    }
+    throw new RpcError(-32603, msg);
+  }
+  return parsed;
+}
+
+/** 内核回报 ok:false 即业务失败（内容缺失 / 撞 id / 跳级等），转成 isError 结果。 */
+function businessFailure(res) {
+  return textResult({ ok: false, errors: res.errors }, true);
+}
 
 /* ---------------- 日志（只走 stderr） ---------------- */
 function logErr(...args) {
@@ -241,13 +312,59 @@ function toolListQuarantine(args) {
   });
 }
 
+/* ---------------- 写侧工具实现 ---------------- */
+function toolSubmitRecipe(args) {
+  /* 错误分两类，刻意不分在一起：
+     -32602 = 「调用方式错了」（tags 传成了字符串），修法是改调用；
+     业务失败 errors[] = 「内容不完整」（缺字段/撞 id/命中脱敏），修法是补齐重试。
+     混成一类，Agent 就无法判断该重试还是该改调用。
+     这里只卡类型，内容层面的校验一律交给 api/ingest.py。 */
+  const payload = {};
+  for (const k of ["title", "model", "problem", "solution"]) {
+    if (args[k] === undefined) continue;
+    if (typeof args[k] !== "string") {
+      throw new RpcError(-32602, `参数 ${k} 必须是字符串`);
+    }
+    // 空串 / 纯空白不是「调用方式错了」，是「内容还没写」——
+    // 归到 -32602 会让 Agent 以为改参数就能好，实际上得改内容。交回内核报业务失败。
+    payload[k] = args[k];
+  }
+  if (args.dead_ends !== undefined && !Array.isArray(args.dead_ends)) {
+    throw new RpcError(-32602,
+      "参数 dead_ends 必须是数组，每条含 attempt / failure / duration / early_signal 四段");
+  } else {
+    payload.dead_ends = args.dead_ends;
+  }
+  if (args.tags !== undefined && !Array.isArray(args.tags)) {
+    throw new RpcError(-32602, "参数 tags 必须是字符串数组，例如 [\"encoding\", \"scrapy\"]");
+  } else {
+    payload.tags = args.tags;
+  }
+  for (const k of ["id", "contributor"]) {
+    if (args[k] !== undefined && typeof args[k] !== "string") {
+      throw new RpcError(-32602, `参数 ${k} 必须是字符串`);
+    }
+    payload[k] = args[k];
+  }
+
+  const res = runIngest(["submit", "-"], payload);
+  return res.ok ? textResult(res) : businessFailure(res);
+}
+
+function toolPromoteRecipe(args) {
+  const id = requireString(args, "id");
+  const confidence = requireString(args, "confidence").toUpperCase();
+  const res = runIngest(["promote", id, confidence]);
+  return res.ok ? textResult(res) : businessFailure(res);
+}
+
 /* ---------------- 工具注册 ---------------- */
 /* 先落一份数据用于推导 offset 上限。loadData 带缓存，后面工具调用不会重复读盘。
    数据源不可达时 recipes=[]，maxOffsetOf 退回下限，不影响报错路径。 */
 const bootData = loadData();
 const LIVE_MAX_OFFSET = maxOffsetOf(bootData.recipes);
 
-const TOOLS = [
+const READ_TOOLS = [
   {
     name: "search_recipes",
     buildDescription() {
@@ -339,6 +456,81 @@ const TOOLS = [
   },
 ];
 
+/* 写侧工具。只在 RECIPE_BOOK_WRITE=1 时挂进 tools/list——默认不给。
+   两个工具分工：submit_recipe 管「进得来」，promote_recipe 管「出得去」。
+   缺了 promote，隔离区就是只进不出的死箱子；缺了 submit，投稿还得人手写 JSON。
+   都不提供编辑与删除：内容一旦进库只能人工改文件（archive-not-delete 的保洁原则）。 */
+const WRITE_TOOLS = [
+  {
+    name: "submit_recipe",
+    description:
+      "把一条踩坑经验提交进库。何时用：你和用户在对话里刚解决完一个真问题，"
+      + "想把这段经验存成配方，而不想让用户学 JSON、开终端。\n"
+      + "内容必须原样来自真实经历：脚本只做格式转换与体检，不会替你补内容、不会润色。"
+      + "缺哪个字段会逐条点名，你补齐后重试即可。\n"
+      + "提交后这条进隔离池（C 级，暂不进主检索），等人复核放行；"
+      + "成功回执里会写明下一步该做什么。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: {
+          type: "string",
+          description: "一句话说清解决什么。纯中文也行，但那样必须显式给 id",
+        },
+        tags: {
+          type: "array",
+          items: { type: "string" },
+          description: "标签数组，取值见 list_tags 的返回。至少 1 个",
+        },
+        model: { type: "string", description: "当时用的模型或工具，如 Claude Sonnet 4.5" },
+        problem: { type: "string", description: "具体卡在哪，卡点的原始现象" },
+        solution: { type: "string", description: "最后怎么破的，可含可复现的操作步骤" },
+        dead_ends: {
+          type: "array",
+          description: "走过的死胡同，每条四段齐全：attempt(试过什么) / failure(结果如何) "
+            + "/ duration(卡了多久) / early_signal(本可提前避开的信号)",
+        },
+        id: {
+          type: "string",
+          description: "可选。库内唯一主键，小写英文短横线，如 recipe-sqlite-wal。"
+            + "不传时按标题推导；标题是纯中文则必须传。撞 id 会被拒绝，原内容不动",
+        },
+        contributor: {
+          type: "string",
+          description: "可选。贡献者句柄，服务端转成不可反查的匿名哈希，同一句柄始终同一标识",
+        },
+      },
+      required: ["title", "tags", "model", "problem", "solution", "dead_ends"],
+    },
+    run: toolSubmitRecipe,
+  },
+  {
+    name: "promote_recipe",
+    description:
+      "人工复核后的放行动作：把一条隔离稿升到 B 级（可信）或 A 级（有实测证据），"
+      + "或驳回回隔离区。何时用：你已看过隔离池里的某条内容，判断它值不值得留。\n"
+      + "B 门槛：格式合规 + 死胡同四段齐全 + 脱敏复检通过。\n"
+      + "A 门槛：B 的基础上还要有可验证的实测结论（result 或 verified 非空）。\n"
+      + "禁止跳级：C 不能直接升 A，须先在 B 停一次。\n"
+      + "本工具只改分级与状态，不碰内容一字——判断内容真伪是人的活儿。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "要晋升的配方 id" },
+        confidence: {
+          type: "string",
+          enum: ["A", "B", "C"],
+          description: "A=完全信任（需实测证据）/ B=可信 / C=驳回回隔离区",
+        },
+      },
+      required: ["id", "confidence"],
+    },
+    run: toolPromoteRecipe,
+  },
+];
+
+const TOOLS = WRITE_ENABLED ? READ_TOOLS.concat(WRITE_TOOLS) : READ_TOOLS;
+
 /* ---------------- 经验向导「培训手册」（R-3 / R-4：自动上岗） ----------------
    单一来源：本常量即「样板员工」的培训手册，同时也是 AGENT_PROMPT.md 的兜底文本。
    接入方 Agent 一连上即可 prompts/get 取到，自动加载为自身指令 → 上岗。
@@ -398,9 +590,12 @@ function handleInitialize(id, params) {
     capabilities: { tools: { listChanged: false }, prompts: { listChanged: false } },
     serverInfo: SERVER_INFO,
     instructions:
-      "解题配方库（只读）。先用 search_recipes 检索；无命中时如实告诉用户「库里没有」，" +
-      "不要用你自己的知识补答案——本库的价值在于「别人真的踩过什么坑」，编造会毁掉它。" +
-      "引用时请带上配方 id，便于用户核对。",
+      "解题配方库（只读" + (WRITE_ENABLED ? "；写侧已开启" : "") + "）。先用 search_recipes 检索；" +
+      "无命中时如实告诉用户「库里没有」，不要用你自己的知识补答案——" +
+      "本库的价值在于「别人真的踩过什么坑」，编造会毁掉它。引用时请带上配方 id，便于用户核对。" +
+      (WRITE_ENABLED
+        ? " 写入仅限已开启写入的那位用户：submit_recipe 提交后进隔离池等人复核，人点头才公开。"
+        : ""),
   });
 }
 
@@ -517,7 +712,10 @@ function main() {
     dispatch(msg);
   });
   rl.on("close", () => process.exit(0));
-  logErr(`就绪：只读模式，${TOOLS.length} 个工具（${TOOLS.map((t) => t.name).join(" / ")}）`);
+  logErr(WRITE_ENABLED
+    ? `就绪：${TOOLS.length} 个工具（${TOOLS.map((t) => t.name).join(" / ")}）— 写入已开启（RECIPE_BOOK_WRITE=1）`
+    : `就绪：只读模式，${TOOLS.length} 个工具（${TOOLS.map((t) => t.name).join(" / ")}）`);
+  if (WRITE_ENABLED) logErr("⚠️ 写工具已挂载：调用方可直接往库里落新配方，落盘即隔离，等人复核。");
 }
 
 main();
