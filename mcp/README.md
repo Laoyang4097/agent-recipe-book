@@ -53,13 +53,16 @@ Windows 上把 `/绝对路径/...` 换成盘符路径（如 `D:/项目/agent-rec
 
 ---
 
-## 提供了哪三个工具
+## 提供了哪四个工具（默认态）
 
 | 工具 | 作用 | 何时会被调用 |
 |---|---|---|
 | **`list_tags`** | 返回全库标签（含出现次数）与领域分类 | 不确定用什么关键词时先看这张目录；也可用来向用户介绍覆盖范围 |
 | **`search_recipes`** | 关键词检索，返回按相关性排序的 Top N，每条含**结构化死胡同** | 主力工具。用户描述卡点后先检索，再决定要不要展开 |
 | **`get_recipe`** | 按 `id` 取某一条的完整内容 | `search_recipes` 已给出候选，需要看某条的完整细节时 |
+| **`list_quarantine`** | 列出**隔离池**（C 级）里的待复核稿 | 想接手「人复核」这一步时先看这里 |
+
+开了 `RECIPE_BOOK_WRITE=1` 再加两个（`submit_recipe` / `promote_recipe`），见下方[《默认只读，写要显式开闸》](#默认只读写要显式开闸)。
 
 ### `search_recipes` 入参与出参
 
@@ -100,11 +103,68 @@ Windows 上把 `/绝对路径/...` 换成盘符路径（如 `D:/项目/agent-rec
 
 ---
 
-## 只读保证
+## 默认只读，写要显式开闸
 
-- 工具列表里**不存在任何写操作**（`tests/mcp-smoke.js` 里有断言守着，见 AC-6）。
-- 服务**不调用任何 LLM、不访问网络**：它只从本地 `api/experiences.json` 读取并排序。
-  因此它**物理上不可能编造**内容——只会搬运库里已有的条目。
+**默认态下工具列表里没有任何写操作**（`tests/mcp-smoke.js` 的 AC-6 断言守着这条）。
+服务**不调用任何 LLM、不访问网络**：它只从本地 `api/experiences.json` 读取并排序，
+因此它**物理上不可能编造**内容——只会搬运库里已有的条目。
+
+写侧是**默认关、显式开**的：
+
+```bash
+RECIPE_BOOK_WRITE=1 node mcp/server.js
+```
+
+开了之后工具列表从 4 个变 6 个，多出 `submit_recipe` 与 `promote_recipe`。
+不开就调它们，一律返回 `-32602`，不会执行到一半才发现是只读的。
+
+> **开闸前请先确认 Python 环境**（这条能省你半小时）。
+> 写侧不自己在 Node 里解析 YAML，而是 spawn 一个 Python 去跑 `api/ingest.py`。
+> 而多数开发机上 PATH 里的 `python` **不带 pyyaml**，带 pyyaml 的在另一个 venv 里。
+> 服务端按「能 `import yaml`」来挑解释器，并把选中的那个打到 stderr；
+> 万一挑错了，报错会直接说清是哪个解释器、候选有哪些：
+>
+> ```bash
+> RECIPE_BOOK_PYTHON=/path/to/venv/Scripts/python.exe RECIPE_BOOK_WRITE=1 node mcp/server.js
+> ```
+
+| 工具 | 作用 | 谁来决定 |
+|---|---|---|
+| **`submit_recipe`** | 把一条新坑投进**隔离池**（`status: quarantined` + `confidence: C`），暂不进主检索 | Agent 投稿，人复核 |
+| **`promote_recipe`** | 升到 B（可信）/ A（有实测证据），或驳回回隔离区 | **人**点头后才动 |
+
+- `submit_recipe` 落盘即刻进隔离池——**投稿 ≠ 公开**，这条是硬规矩（Q-0）。
+- `promote_recipe` **只改分级与状态，不碰内容一个字**：判断内容真伪是人的活儿。
+- 门槛：升 B = 格式合规 + `dead_ends` 四子字段齐全 + 脱敏通过；升 A = B 的基础上还要 `result` 或 `verified` 非空。
+  **禁止跳级**：C 不能直接升 A，须先在 B 停一次。
+- 脱敏命中一律**拦下**（不是「仅提示」）：Q-5，扫到敏感形态直接转待审。
+
+两个错误的用法刻意分开了：参数类型不合规走 JSON-RPC `-32602`（改调用），
+内容缺失/撞 id/跳级/命中脱敏走业务 `errors[]`（改内容重试）。
+混成一类，Agent 就分不清该改参数还是该改稿子。
+
+> 写侧落盘**不由 Node 直接做**：Server 只 spawn `api/ingest.py` 子进程。
+> frontmatter 的渲染真值在 Python 侧，两侧各写一份迟早打架。`tests/mcp-smoke.js` 有断言守着。
+
+未开启写入时，本 Server 的表现完全等同前述只读版本，不受影响。
+
+### 复核一条隔离稿要几步
+
+`list_quarantine` 和 `get_recipe` 是**读工具，不需要开写闸**——所以即便处于默认只读态，
+也可以在 Agent 的帮助下把隔离池过一遍：
+
+| 步 | 调什么 | 说明 |
+|---|---|---|
+| 1 | `list_quarantine` | 拿到待复核清单（`quarantined_count > 0` 就说明池里有货） |
+| 2 | `get_recipe` | 看完整内容。**别只看列表摘要**——四段死胡同是不是真走过弯路，只在正文里 |
+| 3 | `promote_recipe(id, "B" / "A" / "C")` | 放行 / 放行并加实测 / 驳回回隔离区 |
+| 4 | `python api/ingest.py rebuild` | 让人点头这一环节的最后一步，**不能省** |
+
+第 3 步的门槛文案是给维护者看的原话，缺什么就直接说补什么：
+缺死胡同子字段会点名是哪个，脱敏命中会给替换办法，升 A 会提示补完 `result` / `verified`
+再重试。`confidence: C` 的意思是「还没人看过」，不是「这条是错的」。
+
+完整的复核标准（看什么 / 什么该驳回）见 `CONTRIBUTING.md` §5。
 
 ---
 
@@ -147,8 +207,9 @@ printf '%s\n' \
 ## 自测
 
 ```bash
-node tests/mcp-smoke.js     # 42 项断言：握手 / 工具列表 / 检索正确性 / 参数校验 / 只读边界 / 数据源缺失
+node tests/mcp-smoke.js     # 62 项断言：握手 / 工具列表 / 检索正确性 / 参数校验 / 只读边界 / 数据源缺失
 node tests/search-baseline.js   # 46 项断言：检索质量基线
+node tests/write-mcp.test.js    # 23 项断言：开闸后的 submit/promote 全链路（走真 MCP stdio）
 ```
 
 ### 真实会话长什么样

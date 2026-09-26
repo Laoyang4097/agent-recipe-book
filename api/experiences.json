@@ -1,5 +1,122 @@
 [
   {
+    "id": "recipe-atomic-write-half-file",
+    "title": "边写边渲染会留 0 字节烂尾文件",
+    "tags": [
+      "原子写",
+      "文件IO",
+      "python",
+      "数据完整性"
+    ],
+    "model": "Python 3.13 / api/ingest.py",
+    "problem": "写配方落盘时先 open(path, \"w\") 截断文件、再写 f.write(render_md(record))。render_md 一旦抛错，文件已被截成 0 字节，磁盘上留下一个读不出来的空壳，且没任何东西提示写入失败。",
+    "dead_ends": [
+      {
+        "attempt": "用 try/except 兜住 render 异常，继续往下走",
+        "failure": "异常时的目标文件已是 0 字节——截断发生在渲染之前，顺序反了",
+        "duration": "实现期写落盘内核时命中",
+        "early_signal": "磁盘上出现一个存在但内容为空的配方文件，全库文件数却没变"
+      }
+    ],
+    "solution": "先把正文算成完整字符串 text = render_md(record)，再 open 落笔；渲染失败则一个字节都不碰。另外加一道 _roundtrip_ok 回读校验，不通过就删掉刚写的文件并报错。",
+    "result": "失败路径不留半成品；成功路径落盘内容可被原样读回。",
+    "retrospective": "原子性不是「写错了再删掉」，是「根本不让半成品存在」。截断与渲染的先后顺序，决定了异常时你是干净的还是烂的。",
+    "skills": [
+      "python",
+      "文件IO"
+    ],
+    "harness": "api/ingest.py 的 _write_recipe",
+    "hardware": {},
+    "verified": "渲染异常时不产生任何文件；往返校验失败时删除残留",
+    "status": "published",
+    "confidence": "B",
+    "contributor_id": "anon-17753a",
+    "created_at": "2026-09-26"
+  },
+  {
+    "id": "recipe-error-class-split",
+    "title": "静默归一等于替调用方改主键，错误分类错了等于让 Agent 白改参数",
+    "tags": [
+      "API设计",
+      "错误处理",
+      "mcp",
+      "契约"
+    ],
+    "model": "Python 3.13 / Node 22",
+    "problem": "两处：① 提交大写入口 rid = rid.lower() 把大写 id 静默归一，调用方以为自己写的是 Recipe-X，库里躺的是 recipe-x；② 空字符串 title 被判成 JSON-RPC -32602 协议错误，可它其实是「内容还没写」。",
+    "dead_ends": [
+      {
+        "attempt": "沿用「先归一再校验」的顺手写法",
+        "failure": "静默改写了调用方指定的主键，返回的成功回执里 id 跟请求里的不一样，调用方无从察觉",
+        "duration": "实现期",
+        "early_signal": "提交大写 id 竟然通过了，回执里的 id 却是小写"
+      },
+      {
+        "attempt": "把参数类型不合规一律报 -32602",
+        "failure": "空串 title 报成协议错误，Agent 以为改调用方式就能好，实际要改的是稿子内容——两套修复动作被混成一类",
+        "duration": "实现期",
+        "early_signal": "报错码是 -32602，但用户根本没有参数格式上的错"
+      }
+    ],
+    "solution": "① 含大写字符直接拒，报错点名「库内 id 形如 recipe-sqlite-wal」；② 错误分两类讲清楚：参数类型不合规 → -32602（改调用）；内容缺失 / 撞 id / 跳级 / 脱敏命中 → 业务失败 errors[]（改内容）。",
+    "result": "提交方指定 status / confidence 会被直接拒绝——服务端锁死的两项不让客户端指定。空串 title 落到内核报业务失败。",
+    "retrospective": "错误分类告诉调用方「该改什么」。把两类修复动作混成一类，等于让对方在两条路里猜。静默归一最省事，也最不负责任。",
+    "skills": [
+      "api-design",
+      "error-handling",
+      "python",
+      "node"
+    ],
+    "harness": "api/ingest.py 的 validate_submit / mcp/server.js 的 toolSubmitRecipe",
+    "hardware": {},
+    "verified": "大写 id 被拒；空串 title 报业务 errors[] 而非 -32602",
+    "status": "published",
+    "confidence": "B",
+    "contributor_id": "anon-17753a",
+    "created_at": "2026-09-26"
+  },
+  {
+    "id": "recipe-fixture-fake-weak-match",
+    "title": "自己造的弱命中探针是假的：断言自己实现了自己的期望值",
+    "tags": [
+      "测试",
+      "假绿",
+      "检索",
+      "断言质量"
+    ],
+    "model": "Node 22 / lib/search.js",
+    "problem": "想测「匹配度不够的 C 级被压住、不返回」，造了一条只在 problem 里蹭到关键词的 C。结果它跟强命中同分，matchPct 恒 100%——断言绿得毫无意义，等于什么都没验。",
+    "dead_ends": [
+      {
+        "attempt": "把关键词写进探针的 title 里凑内容",
+        "failure": "那两个字吃到标题权重（+2），和强命中配方打平，弱命中根本没弱下来",
+        "duration": "M2 加固期当场命中",
+        "early_signal": "断言通过得意外地顺——一个本该失败的场景一次就过了，通常说明构造本身有问题"
+      },
+      {
+        "attempt": "直接用关键词去查全库，想找个零命中的词",
+        "failure": "'zzz-nonexistent-word-绝无此词' 被切成二元组，组里两字都命中了真实配方，命中了不该命中的东西",
+        "duration": "紧接上一轮",
+        "early_signal": "「绝无此词」居然 matched=true"
+      }
+    ],
+    "solution": "① 关键词绝不出现在探针的 title 里，只放在 problem/body；② 定断言前先把 raw 分数打出来量一遍，确认弱命中确实弱；③ 选一个在真库里零命中的词做「全库无命中」探针。",
+    "result": "R-1..R-5 五条破例露头规则全部得到真实覆盖，25/25 通过。",
+    "retrospective": "假绿比红危险。红灯会逼你去看实现，绿灯让你以为看过了。凡是「该失败却一次就过」的断言，先怀疑测试自己。",
+    "skills": [
+      "测试",
+      "node",
+      "检索"
+    ],
+    "harness": "tests/search-quarantine.test.js 的 R-1..R-5",
+    "hardware": {},
+    "verified": "分数实测：弱命中 < 阈值，强命中 > 阈值，破例露头仅 Top1",
+    "status": "published",
+    "confidence": "B",
+    "contributor_id": "anon-17753a",
+    "created_at": "2026-09-26"
+  },
+  {
     "id": "recipe-gh-pages-pat-scope",
     "title": "fine-grained PAT 开不了 GitHub Pages：权限逐项授予，缺 Pages 就是 403",
     "tags": [
@@ -287,6 +404,59 @@
     "seed": true,
     "contributor_id": "anon-2f183a",
     "created_at": "2026-09-25"
+  },
+  {
+    "id": "recipe-interpreter-pick-not-install",
+    "title": "不是缺依赖是挑错了解释器：默认配置下开闸必然失败，而测试全绿",
+    "tags": [
+      "python",
+      "mcp",
+      "环境",
+      "测试",
+      "假绿"
+    ],
+    "model": "Node 22 / Git Bash / Windows 10",
+    "problem": "写侧 MCP 开闸后 submit_recipe 100% 失败，回执写着「❌ 未安装 pyyaml，无法安全渲染 frontmatter，请先 pip install pyyaml」。但 venv 里明明装了 pyyaml，命令行直接跑 api/ingest.py 也完全正常——唯独经由 MCP 调用必挂。",
+    "dead_ends": [
+      {
+        "attempt": "按报错字面处理，认定是依赖缺失，去 pip install pyyaml",
+        "failure": "装了也没用：缺的依赖根本不在报错提及的那个解释器里，换一个解释器就能跑通同一个脚本",
+        "duration": "跨 2 轮（M2 加固 + 现场验收）",
+        "early_signal": "同一个脚本命令行能跑、经 MCP 就失败，矛盾点不在「装没装」，在「跑的是哪个解释器」"
+      },
+      {
+        "attempt": "给 server.js 解析器回退链写成 process.env.PYTHON || \"python\"",
+        "failure": "PATH 上的 python 是不带 pyyaml 的 managed 解释器，带 pyyaml 的在另一个 venv；按名字猜必猜到错的那个",
+        "duration": "跨 2 轮",
+        "early_signal": "报错信息伪装成依赖问题，把排查引向完全错误的方向"
+      },
+      {
+        "attempt": "只在测试进程里加解释器挑选（按能否 import yaml 筛），测试就绿了",
+        "failure": "12 项断言全过，但用户拿到的默认配置下一次都跑不通——测试进程替用户把环境准备做掉了",
+        "duration": "跨 2 轮",
+        "early_signal": "验收脚本第一次调 submit_recipe 就失败，而同一套 npm test 刚刚 exit=0"
+      }
+    ],
+    "solution": "① 按能力筛不按名字猜：候选逐个试 `python -c \"import yaml\"`，能 import 的才选；② 把挑选逻辑下沉到 lib/pybin.js，读写侧与测试共用同一份，不再各挑各的；③ 选中的解释器打到 stderr，让人看得到它选了谁；④ 挑不出可用解释器时，报错直接点名是哪个解释器、候选有哪些，而不是回一句「未安装 pyyaml」。",
+    "result": "现场验收六幕全过：投稿落盘并进隔离池 → 主检索搜不到 / list_quarantine 看得到 → 脱敏命中被拦且命中词打码 → promote B 成功 → rebuild 后检索搜得到 → recipes/ 零残留。npm test exit=0。",
+    "retrospective": "「测试绿了」只证明在测试自己的环境配置下能跑通，不证明用户拿到手的默认配置能跑通。测试进程里做的环境准备，等于替用户把坑填了。验收要看用户真正拿到的那个配置。这条教训在当天重复出现了三次。",
+    "skills": [
+      "python",
+      "node",
+      "mcp",
+      "测试策略"
+    ],
+    "harness": "WorkBuddy agentic Bash + Node 22.22.2 + Git Bash",
+    "hardware": {
+      "python": "3.13.12 managed + venv（两个都能叫 python）",
+      "os": "win32 (Git Bash)"
+    },
+    "agent_config": "RECIPE_BOOK_WRITE=1 开写闸；RECIPE_BOOK_PYTHON 可强制指定解释器",
+    "verified": "现场验收六幕实测通过，不含推断",
+    "status": "published",
+    "confidence": "B",
+    "contributor_id": "anon-17753a",
+    "created_at": "2026-09-26"
   },
   {
     "id": "recipe-managed-python-env-pitfalls",
@@ -1003,6 +1173,86 @@
     "created_at": "2026-09-23"
   },
   {
+    "id": "recipe-redact-rules-true-corpus-first",
+    "title": "脱敏规则落地前先拿真库跑一遍：一个文档保留段就废了整条规则",
+    "tags": [
+      "正则",
+      "脱敏",
+      "安全",
+      "验收",
+      "回归"
+    ],
+    "model": "Python 3.13 / 本仓库 recipes/ 44 条",
+    "problem": "照 PRD 把 SENSITIVE_PATTERNS 接进 validate() 当闸门。接线前照例在真库上跑了一遍，结果 44 条现有配方里 5 条被误伤，其中 3 条（讲 PAT / token 怎么用）恰恰是讲凭据的——按原样当闸门，这 5 条永远升不了级。",
+    "dead_ends": [
+      {
+        "attempt": "把 10.x 整段当私网 IP 拦",
+        "failure": "10.255.255.1 同时是 RFC 1918 私网段和 RFC 5737 文档保留段，现有配方正拿它做「模拟国内不可达」实验，被判定为内网 IP 误伤",
+        "duration": "实现期当场命中",
+        "early_signal": "误伤清单里三条都在讲 token 用法——规则在拦「讲安全」的配方"
+      },
+      {
+        "attempt": "把私钥头塞进外层词边界组一起匹配（外层套了词边界锚点）",
+        "failure": "它以连字符开头，前面加词边界锚点后，锚点只存在于非词字符与词字符之间，这类串永远匹配不上，私钥形同虚设",
+        "duration": "实现期当场命中",
+        "early_signal": "写完拿真凭据样本测，RSA / OPENSSH 头零命中"
+      }
+    ],
+    "solution": "收紧的是「识别方式」不是「判断标准」：把裸关键词列表改成认凭据形态——键值赋值（键名后紧跟等号或冒号再接若干字符）、各家云厂商的密钥前缀与 Bearer 头、家目录绝对路径、内网 IP、内网域名。10.x 整段放行，只拦 192.168 与 172.16-31。改完在全库上复跑，零误伤。",
+    "result": "全库 44 条零误伤；10 类真实凭据形态全部拦下；讲原理的正常内容不误伤。",
+    "retrospective": "写「该拦什么」之前先量「会误伤多少」。规则没在真数据上跑过就接线，等于拿线上当实验场。误伤清单是最好的测试用例——它逼你回答「这条为什么要拦」。另：写这条配方时自己又连撞两脚。第一脚是 solution 里照抄了几种密钥前缀与家目录绝对路径，被自家规则拦下、不落盘，报错里的命中词还打成了打码标记——一道能拦住写它的人的红线，才算真接上了。第二脚更蠢：为了把正则写进 frontmatter 我给它套了单引号，以为单引号能保护反斜杠，结果 frontmatter 整个解析不了。实测下来 YAML 单引号只取消引号自身的转义对，其它反斜杠序列照样被解释成退格符一类不可打印字符，正解是写双反斜杠。",
+    "skills": [
+      "regex",
+      "安全",
+      "python"
+    ],
+    "harness": "api/ingest.py validate() + api/ingest_write.test.py 的 T1a/T1b/T1c",
+    "hardware": {
+      "corpus": "recipes/*.md 44 条"
+    },
+    "verified": "全库零误伤 + 10 类真凭据全拦，both sides 实测",
+    "status": "published",
+    "confidence": "B",
+    "contributor_id": "anon-17753a",
+    "created_at": "2026-09-26"
+  },
+  {
+    "id": "recipe-render-order-drift",
+    "title": "新字段漏进渲染清单等于没落盘：confidence 不在 RENDER_ORDER 里，隔离态被主检索直接返回",
+    "tags": [
+      "yaml",
+      "frontmatter",
+      "架构",
+      "数据一致性",
+      "隔离"
+    ],
+    "model": "Python 3.13 / api/ingest.py",
+    "problem": "投稿时同时置了 status: quarantined 与 confidence: C，两把锁一起上。但 rebuild 回来后读侧 confidenceOf 按默认值返回 A，隔离态配方被主检索当成 A 档直接返回——「投稿即公开」漏洞的另一半，藏在渲染清单里。",
+    "dead_ends": [
+      {
+        "attempt": "只盯 status 字段，认为隔离靠 status 一处就够",
+        "failure": "confidence 不在 RENDER_ORDER 这个渲染字段清单里，render_md 渲染出的配方不带上它，落盘后重建索引即丢失",
+        "duration": "实现期核对现状时撞见",
+        "early_signal": "隔离态配方出现在主检索结果里，而 status 明明白白写着 quarantined"
+      }
+    ],
+    "solution": "把 confidence 补进 RENDER_ORDER。这个清单是渲染字段的唯一真值源，render_md 是唯一写入口——只要新增字段，第一件事是问它进清单了没有。",
+    "result": "隔离双锁成立：投稿即 status=quarantined + confidence=C，两处同时改、同时写。晋升时两者一起改，回驳回隔离。",
+    "retrospective": "「单一真值源」这句话只在所有模块都真去 import 它时才成立。清单建了、字段加了，但渲染函数漏了一个——这类漂移不会报错，只会静默降级成默认值。",
+    "skills": [
+      "python",
+      "yaml",
+      "架构"
+    ],
+    "harness": "api/ingest.py 的 RENDER_ORDER / render_md",
+    "hardware": {},
+    "verified": "隔离态不进主检索、进 list_quarantine，rebuild 后仍成立",
+    "status": "published",
+    "confidence": "B",
+    "contributor_id": "anon-17753a",
+    "created_at": "2026-09-26"
+  },
+  {
     "id": "recipe-shell-heredoc-quoting",
     "title": "bash heredoc 里的嵌套引号会把脚本绞碎",
     "tags": [
@@ -1041,6 +1291,113 @@
     "seed": true,
     "contributor_id": "anon-2f183a",
     "created_at": "2026-09-24"
+  },
+  {
+    "id": "recipe-tmp-gitbash-vs-windows-python",
+    "title": "Git Bash 的 /tmp 和 Windows Python 眼里的 /tmp 不是同一个目录",
+    "tags": [
+      "git-bash",
+      "windows",
+      "临时目录",
+      "跨层调用"
+    ],
+    "model": "Git Bash + Windows Python 3.13",
+    "problem": "测试脚本按 Linux 习惯往 /tmp 写临时 JSON 再喂给 Python，Python 报 FileNotFoundError: '/tmp/o1.json' —— 在 Git Bash 里 /tmp 被翻译成它自己的目录，在 Windows 解释器眼里 /tmp 根本不存在。",
+    "dead_ends": [
+      {
+        "attempt": "改成相对路径 ./tmp/o1.json",
+        "failure": "两边对当前目录的理解又不一样，问题平移而非消失",
+        "duration": "实现期",
+        "early_signal": "同一个路径在 bash 和 python 里解析出两个地方"
+      }
+    ],
+    "solution": "改用两边都认的临时目录绝对路径，测试里统一用它，不再写 /tmp。",
+    "result": "跨 Git Bash 与 Windows Python 的取数不再出错。",
+    "retrospective": "凡是 bash 层与 Python 层共享的路径，都得挑「两边都认」的那个。Linux 的路径直觉在 Windows 上是要付费的。",
+    "skills": [
+      "bash",
+      "windows",
+      "python"
+    ],
+    "harness": "tests/write-mcp.test.js 与 CLI 提交均走该目录",
+    "hardware": {
+      "os": "win32 (Git Bash)"
+    },
+    "verified": "实测双向可用",
+    "status": "published",
+    "confidence": "B",
+    "contributor_id": "anon-17753a",
+    "created_at": "2026-09-26"
+  },
+  {
+    "id": "recipe-unreachable-branch-in-engine",
+    "title": "生产路径走不到的分支也要单测它：否则又是一段没人走的死代码",
+    "tags": [
+      "测试",
+      "死代码",
+      "内核",
+      "覆盖率"
+    ],
+    "model": "Python 3.13 / api/ingest.py",
+    "problem": "promotion_errors() 里「dead_ends 四段不全不能升 B」这条分支，按常规路径根本走不到——submit_recipe 的 validate_submit 已经把四个子字段卡死，投稿时过不来的东西晋升时不可能缺。按正常路径写测试，直接被 submit 挡了回来。",
+    "dead_ends": [
+      {
+        "attempt": "照着正常链路写 promote 测试：先 submit 一份缺字段的稿、再 promote",
+        "failure": "submit 阶段就报「缺 early_signal」，promote 根本没被调用——测的是 submit 的门禁，不是晋升的门禁",
+        "duration": "M2 加固期",
+        "early_signal": "报错来自 submit 而不是 promote，日志里的函数名不对"
+      }
+    ],
+    "solution": "单测直接打 promotion_errors()，绕开上游门禁单独验证这条分支：既要证明它还在守门，也不能因为从入口测不到就当它不存在。",
+    "result": "39/39 通过，晋升门槛每条分支都有断言守着。",
+    "retrospective": "这正是当年 SENSITIVE_PATTERNS 写成死代码的同一个坑：规则写好了、没人调用、没人发现。凡是「上游已经拦了」才显得多余的分支，恰恰是最容易悄悄失效的地方——它是最后一道门，不是多余的那道。",
+    "skills": [
+      "测试",
+      "python",
+      "内核设计"
+    ],
+    "harness": "tests/ingest_write.test.py 的 T5k/T5l/T5m",
+    "hardware": {},
+    "verified": "直接单测 promotion_errors 各分支均返回预期 field",
+    "status": "published",
+    "confidence": "B",
+    "contributor_id": "anon-17753a",
+    "created_at": "2026-09-26"
+  },
+  {
+    "id": "recipe-validate-without-assign",
+    "title": "校验了却忘了赋值：类型检查过了，交下去的内容还是空的",
+    "tags": [
+      "bug",
+      "mcp",
+      "数据流转",
+      "契约"
+    ],
+    "model": "Node 22 / mcp/server.js",
+    "problem": "submit_recipe 里对 tags 与 dead_ends 做了类型校验，校验分支之外没把值赋进 payload，结果是内核收到一份缺 tags、缺 dead_ends 的稿子，报「缺必填字段」。看起来像用户没填，实际是这层悄悄吞了。",
+    "dead_ends": [
+      {
+        "attempt": "照错误提示让用户补字段",
+        "failure": "字段确实传了，补多少遍都有缺——问题在这一层校验完没往下游传",
+        "duration": "实现期当场命中",
+        "early_signal": "客户端明明传了 tags，回执却说没传"
+      }
+    ],
+    "solution": "校验与赋值配对写：类型不合规就抛 -32602，合规就原样写进 payload，不留一个只校验不落值的分支。",
+    "result": "经 MCP 投稿与经 CLI 投稿走同一份载荷，行为一致。",
+    "retrospective": "「校验」和「赋值」是同一个动作的两半。拆成两个分支写，中间那步就容易被漏掉——而漏掉它，报错还会伪装成用户的问题。",
+    "skills": [
+      "node",
+      "api-design",
+      "调试"
+    ],
+    "harness": "mcp/server.js 的 toolSubmitRecipe",
+    "hardware": {},
+    "verified": "A-1 经 MCP 投稿成功入池，回执含 id / contributor_id / status / confidence",
+    "status": "published",
+    "confidence": "B",
+    "contributor_id": "anon-17753a",
+    "created_at": "2026-09-26"
   },
   {
     "id": "recipe-web-cjk-substring-search",

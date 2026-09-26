@@ -2,12 +2,16 @@
 > 人类解题经验的机器可读共享库。每条配方含 模型/skill/harness/硬件 与结构化死胡同。
 
 ## 索引
+- recipes/recipe-atomic-write-half-file.md: 边写边渲染会留 0 字节烂尾文件 — 先把正文算成完整字符串 text = render_md(record)，再 o
+- recipes/recipe-error-class-split.md: 静默归一等于替调用方改主键，错误分类错了等于让 Agent 白改参数 — ① 含大写字符直接拒，报错点名「库内 id 形如 recipe-sqlite-w
+- recipes/recipe-fixture-fake-weak-match.md: 自己造的弱命中探针是假的：断言自己实现了自己的期望值 — ① 关键词绝不出现在探针的 title 里，只放在 problem/body；②
 - recipes/recipe-gh-pages-pat-scope.md: fine-grained PAT 开不了 GitHub Pages：权限逐项授予，缺 Pages 就是 403 — 两条路：① 给该 fine-grained PAT 追加 Pages: Read
 - recipes/recipe-git-api-push-stale-ref.md: 走 API 推送后本地显示 ahead N：本地 origin 指针的陈旧假象 — ① 用「内容比对」而非「引用计数」判断同步：逐文件对比本地内容与远端 API 返
 - recipes/recipe-git-pat-push.md: 用 fine-grained PAT 推 GitHub：Bearer 头被 git 忽略，必须 URL 内嵌 token 当 Basic Auth — ① git smart-HTTP 用 Basic Auth，Bearer 头无效
 - recipes/recipe-git-push-no-tty-credential.md: Git Bash 无 tty 下推 GitHub：extraheader 被忽略、credential-manager 弹不了窗 — ① 绕开凭据管理器：`git config --local credential
 - recipes/recipe-git-repo-location-assumed.md: 只查一层就说"这里不是 git 仓库"——验证范围小于结论所依赖的前提 — 判断仓库位置用 `find . -maxdepth 3 -name ".git"
 - recipes/recipe-infra-verify-silent-pass.md: 三处"验证通过"其实是没验证到：端口残留 / 日志过滤 / 兜底分类 — ① 服务/探针类脚本：启动前确认端口真的空闲，日志落文件而不是写 /dev/nu
+- recipes/recipe-interpreter-pick-not-install.md: 不是缺依赖是挑错了解释器：默认配置下开闸必然失败，而测试全绿 — ① 按能力筛不按名字猜：候选逐个试 `python -c "import yam
 - recipes/recipe-managed-python-env-pitfalls.md: 在 WorkBuddy 托管 Python 环境跑依赖脚本的坑（缺包 / 丢 git 身份 / cwd 不持久 / YAML 日期序列化） — ① 建隔离 venv 装依赖：`python -m venv .../envs/
 - recipes/recipe-pj-guess-as-conclusion.md: 把拍脑袋的估计当结论写进文档 —— 20 分钟能测出来的数，用「大概」代替 — 把「性能 / 容量」类断言统一改成「实测 + 拐点」写法：写一个 20 行的基准
 - recipes/recipe-pj-requirement-misremembered.md: 把主办方要求记错，按「常识」排期 —— 差点白耗 2-3 天做错重点 — 把主办方原文拆成三栏清单：初赛必交 / 初赛可选 / 决赛必交，每条标注原文出处
@@ -25,7 +29,12 @@
 - recipes/recipe-py-spa-empty-shell.md: requests 抓某短视频站首页：200 却返回 <body></body>，正文 0 字符、99.9% 是 JS — 可跑要点：① 先做『SPA 空壳体检』——抓完后计算 body 内去标签文本长度
 - recipes/recipe-py-table-merged-cells.md: requests 解析含 rowspan/colspan 的表格：每行单元格数参差 [3,4,5,...]，列直接错位 — 可跑要点：① 不要用『每行 td 数』当列数；先按 rowspan/colspa
 - recipes/recipe-py-ua-diff-nonbrowser.md: requests 默认 UA 遭差异对待：同 200 却 290 字符 vs 17626 字符正文，另有 403/444/跳登录 — 可跑要点：① 抓取前统一显式设置浏览器 UA（Chrome UA + Accep
+- recipes/recipe-redact-rules-true-corpus-first.md: 脱敏规则落地前先拿真库跑一遍：一个文档保留段就废了整条规则 — 收紧的是「识别方式」不是「判断标准」：把裸关键词列表改成认凭据形态——键值赋值（
+- recipes/recipe-render-order-drift.md: 新字段漏进渲染清单等于没落盘：confidence 不在 RENDER_ORDER 里，隔离态被主检索直接返回 — 把 confidence 补进 RENDER_ORDER。这个清单是渲染字段的唯
 - recipes/recipe-shell-heredoc-quoting.md: bash heredoc 里的嵌套引号会把脚本绞碎 — 不再把长脚本塞进 heredoc。改为把脚本写入临时文件（用写文件工具而非 ec
+- recipes/recipe-tmp-gitbash-vs-windows-python.md: Git Bash 的 /tmp 和 Windows Python 眼里的 /tmp 不是同一个目录 — 改用两边都认的临时目录绝对路径，测试里统一用它，不再写 /tmp。
+- recipes/recipe-unreachable-branch-in-engine.md: 生产路径走不到的分支也要单测它：否则又是一段没人走的死代码 — 单测直接打 promotion_errors()，绕开上游门禁单独验证这条分支：
+- recipes/recipe-validate-without-assign.md: 校验了却忘了赋值：类型检查过了，交下去的内容还是空的 — 校验与赋值配对写：类型不合规就抛 -32602，合规就原样写进 payload，
 - recipes/recipe-web-cjk-substring-search.md: 中文搜索用整串 includes 匹配：自然语言查询必然 0 结果 — 中文按 2-gram 切分、英文数字按词切分，任一命中即算匹配（OR 语义），按
 - recipes/recipe-web-dark-block-patchwork.md: 白底页面上硬贴一块深色搜索框：像补丁，不像设计 — 回归层级手段做焦点：白底 + 清晰边框 + 聚焦时的强调色光环 + 字重/字号对
 - recipes/recipe-web-decorative-motion-debt.md: 粒子背景+扫描线+均衡器：自己觉得科技感，实际是设计债 — 全部删除。只保留功能性动效：滚动入场（IntersectionObserver）
