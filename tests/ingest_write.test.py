@@ -184,6 +184,15 @@ def t3_id_rules():
     except ingest.WriteError as e:
         check("T3a 纯中文标题不得自动推导 id（AC-3.3）", "id" in fields(e.errors), str(e.errors))
 
+    # 回归：曾经判断是「slugify 结果非空即可」，于是「重复 id 探针」推出主键 id，
+    # 「抓下来全是乱码 ip 问题」推出 ip。垃圾主键看不出说的是哪个坑，还会撞车。
+    try:
+        ingest.submit_recipe(full_payload(title="重复 id 探针"))
+        check("T3f 含中文的标题不得从 ASCII 片段推出垃圾 id", False, "推出了 " + text_of("id"))
+    except ingest.WriteError as e:
+        check("T3f 含中文的标题不得从 ASCII 片段推出垃圾 id",
+              "id" in fields(e.errors), str(e.errors))
+
     r = ingest.submit_recipe(full_payload())
     rid = r["id"]
     check("T3b 英文标题自动推导合规 id", rid == "sqlite-wal", rid)
@@ -236,7 +245,7 @@ def t5_promote():
         check("T5a C→A 跳级被拒（AC-6.5）",
               any("跳级" in x["reason"] for x in e.errors), str(e.errors))
         check("T5a 跳级文案给出具体动作，不是干巴巴一句「不行」",
-              any('promote_recipe(id, "B")' in x["reason"] for x in e.errors), str(e.errors))
+              any('promote_recipe(id, confidence="B")' in x["reason"] for x in e.errors), str(e.errors))
     check("T5b 晋升失败不改原稿一字（AC-6.6）", text_of("recipe-mojibake") == before)
 
     r = ingest.promote_recipe("recipe-mojibake", "B")
@@ -325,6 +334,25 @@ def t6_index_sync():
     check("T6c 晋升后 rebuild 才进公开索引（A-15）", "recipe-mojibake" in llms2)
 
 
+# ---------------- 7. 晋升不得丢字段 ----------------
+def t7_keep_unknown_fields():
+    print("\n[7] 晋升不得丢掉 RENDER_ORDER 之外的字段（seed 角标回归）")
+    ingest.submit_recipe(full_payload(title="编码抓回来是乱码", id="recipe-seed-probe"))
+    path = os.path.join(ingest.RECIPES_DIR, "recipe-seed-probe.md")
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    # 模拟种子配方：手工往 frontmatter 里加一个不在 RENDER_ORDER 里的字段
+    seeded = text.replace("status: quarantined", "seed: true\nstatus: quarantined", 1)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(seeded)
+    ingest.promote_recipe("recipe-seed-probe", "B")
+    with open(path, encoding="utf-8") as f:
+        fm = ingest.parse_frontmatter(f.read())
+    check("T7a 晋升后 seed 字段还在（网站 SEED 角标靠它）", fm.get("seed") is True, str(sorted(fm)))
+    check("T7b 晋升照常置 published / B", fm.get("status") == "published"
+          and fm.get("confidence") == "B", f"{fm.get('status')}/{fm.get('confidence')}")
+
+
 if __name__ == "__main__":
     print("=== 写侧内核回归测试 ===")
     t1_sensitive_rules()
@@ -333,6 +361,7 @@ if __name__ == "__main__":
     t4_submit_success()
     t5_promote()
     t6_index_sync()
+    t7_keep_unknown_fields()
 
     print(f"\n通过 {len(PASS)} / 失败 {len(FAIL)}")
     if FAIL:
