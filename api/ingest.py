@@ -190,6 +190,7 @@ def _roundtrip_ok(md_path: str) -> bool:
 
 ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 ID_MAX_LEN = 60
+CJK_RE = re.compile(r"[一-鿿]")
 CONFIDENCE_ENUM = ["A", "B", "C"]
 
 
@@ -306,10 +307,18 @@ def submit_recipe(payload: dict) -> dict:
         raise WriteError(errs)
     rid = explicit.lower()
     if not rid:
-        if not slugify(title):
+        # 中文占一半以上的标题不许自动推 id。原先的判断是「slugify 结果非空即可」，
+        # 于是「重复 id 探针」推出主键 id、「抓下来全是乱码 ip 问题」推出 ip——
+        # 这种主键看不出说的是哪个坑，还会让两篇不同标题撞出同一个 slug。
+        # 但不能一刀切「含中文就拒」：英文标题后面挂句中文说明是常态
+        # （「SQLite WAL 模式下并发写入卡住」本来就该推出 sqlite-wal），
+        # 那种情况中文占比恰好 50%，按「过半才算中文标题」放行。
+        cjk = len(CJK_RE.findall(title))
+        if cjk * 2 > len(title.replace(" ", "").replace("-", "").replace("_", "")):
             errs.append({"field": "id",
-                         "reason": "标题是纯中文，无法自动推导合规 id（库内 44 条 id 全为英文短横线）。"
-                                   "请显式传 id，例如 recipe-sqlite-wal，或改用英文标题。"})
+                         "reason": "标题里有中文，无法自动推导 id（slugify 只会抠出一个英文词，"
+                                   "例如「重复 id 探针」会推出主键 id）。请显式传 id，"
+                                   "形如 recipe-sqlite-wal"})
             raise WriteError(errs)
         rid = slugify(title)
     if len(rid) > ID_MAX_LEN:
@@ -345,7 +354,8 @@ def submit_recipe(payload: dict) -> dict:
         "confidence": record["confidence"],
         "next_human_action":
             "这条已进隔离池（C 级，暂不进主检索）。请你本人复核内容：认为值得留就调 "
-            "promote_recipe(id, \"B\") 升为可信档并公开，否则调 promote_recipe(id, \"C\") 驳回。"
+            "promote_recipe(id, confidence=\"B\") 升为可信档并公开，否则调 "
+            "promote_recipe(id, confidence=\"C\") 驳回。（注意参数名是 confidence，不是 level）"
             "对外公开索引还需你在维护者侧跑一次 ingest.py rebuild。",
     }
 
@@ -428,14 +438,20 @@ def promote_recipe(rid: str, level: str) -> dict:
     # 禁跳级：C 想直接升 A 必须先在 B 停一次，否则分级就失去意义
     if level == "A" and cur_conf == "C":
         raise WriteError([{"field": "confidence",
-                           "reason": "禁止跳级：C 不能直接升 A。先调 promote_recipe(id, \"B\") "
+                           "reason": "禁止跳级：C 不能直接升 A。先调 promote_recipe(id, confidence=\"B\") "
                                      "在 B 停一次，过了 B 的门槛再升 A"}])
     errs = promotion_errors(fm, level)
     if errs:
         raise WriteError(errs)  # 失败时不碰原稿，AC-6.6
 
     new_conf, new_status = level, ("quarantined" if level == "C" else "published")
-    new_fm = {k: fm[k] for k in RENDER_ORDER if k in fm}
+    # 字段取舍按「原文件的样子」走，不按 RENDER_ORDER 过滤。
+    # 曾经写成 {k: fm[k] for k in RENDER_ORDER if k in fm}，结果 44 条种子配方里的
+    # seed: true 被晋升顺手删掉——网站靠它在卡片上打 SEED 角标，于是角标无声消失。
+    # 不报错、不提示，只有角标没了，下次再看会以为是自己记错。未知字段必须留着。
+    ordered = [k for k in fm if k in RENDER_ORDER]
+    tail = [k for k in fm if k not in RENDER_ORDER]
+    new_fm = {k: fm[k] for k in ordered + tail}
     new_fm["confidence"] = new_conf   # 晋升同时置 published，否则进不了公开目录
     new_fm["status"] = new_status
 

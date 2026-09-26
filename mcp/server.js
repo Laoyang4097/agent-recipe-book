@@ -475,7 +475,8 @@ const WRITE_TOOLS = [
       properties: {
         title: {
           type: "string",
-          description: "一句话说清解决什么。纯中文也行，但那样必须显式给 id",
+          description: "一句话说清解决什么。英文标题会自动推导 id；"
+            + "中文占一半以上的标题必须显式传 id（否则会推出 id / ip 这类猜不出含义的主键）",
         },
         tags: {
           type: "array",
