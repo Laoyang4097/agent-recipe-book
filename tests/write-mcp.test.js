@@ -15,23 +15,17 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { pickPython } from "../lib/pybin.js";
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const SERVER = path.join(ROOT, "mcp", "server.js");
 /* 解释器探测与 run-python.js 共用一份（见 pybin.js）：写侧要真 spawn ingest.py，
    挑到没有 pyyaml 的那个，整个测试会以「未安装 pyyaml」伪装成环境缺失而全红。 */
+import { pass, failures, check, section } from "./_harness.js";
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const SERVER = path.join(ROOT, "mcp", "server.js");
 const PY = pickPython();
 console.log(`[解释器] ${PY}`);
 const RECIPES_DIR = path.join(ROOT, "recipes");
 const EXP_JSON = path.join(ROOT, "api", "experiences.json");
 const LLMS_TXT = path.join(ROOT, "llms.txt");
-
-let pass = 0;
-const failures = [];
-function check(name, ok, detail = "") {
-  if (ok) { pass++; console.log(`  ✅ ${name}`); }
-  else { failures.push(name); console.log(`  ❌ ${name}${detail ? "  — " + detail : ""}`); }
-}
-function section(t) { console.log(`\n${t}`); }
 
 function startServer(env = {}) {
   const child = spawn(process.execPath, [SERVER], {

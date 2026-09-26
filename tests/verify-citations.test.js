@@ -7,13 +7,7 @@
 
 import { verifyCitations } from "../lib/verifyCitations.js";
 
-let pass = 0;
-const failures = [];
-function check(name, ok, detail = "") {
-  if (ok) { pass++; console.log(`  ✅ ${name}`); }
-  else { failures.push(name); console.log(`  ❌ ${name}${detail ? "  — " + detail : ""}`); }
-}
-function section(t) { console.log(`\n${t}`); }
+import { pass, failures, check, section } from "./_harness.js";
 
 const ALLOWED = ["recipe-py-encoding-mojibake", "recipe-py-antibot-stop-on-hit"];
 

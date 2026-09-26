@@ -10,16 +10,10 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
+
+import { pass, failures, check, section } from "./_harness.js";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SERVER = join(ROOT, "mcp", "server.js");
-
-let pass = 0;
-const failures = [];
-function check(name, ok, detail = "") {
-  if (ok) { pass++; console.log(`  ✅ ${name}`); }
-  else { failures.push(name); console.log(`  ❌ ${name}${detail ? "  — " + detail : ""}`); }
-}
-function section(t) { console.log(`\n${t}`); }
 
 function startServer() {
   const child = spawn(process.execPath, [SERVER], { stdio: ["pipe", "pipe", "pipe"] });
