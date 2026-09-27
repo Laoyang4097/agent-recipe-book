@@ -56,10 +56,15 @@ RENDER_ORDER = ["id", "title", "tags", "model", "problem", "dead_ends",
 # 裸出现关键词不算，当成凭据用才算。收紧的是识别方式，不是放行标准——
 # 负例（真凭据）仍须被全部拦下，见 tests/write-mcp.test.js。
 SENSITIVE_RULES = [
-    # 键值形态：token=xxx / password: xxx
+    # 键值形态：token=xxx / password: xxx。全角冒号「：」也要拦——红队实测
+    # （RT-B1）原字符类只有半角冒号与全角等号，"password：abc123456789" 直接放行。
     ("credential_kv",
      r"(?i)\b(api[_-]?key|apikey|secret|password|passwd|token|access[_-]?key)"
-     r"\s*[:＝=]\s*\S{4,}"),
+     r"\s*[:＝=：]\s*\S{4,}"),
+    # 中文键名形态：密码：xxx / 密钥 = xxx。红队实测（RT-B2）原规则不含中文键，
+    # 「把 密码：abc123456789 填进表单」整条放行。
+    ("credential_cn",
+     r"(?:密码|口令|密钥|秘钥|凭据)\s*[:＝=：]\s*\S{4,}"),
     # 凭据字面：各厂商密钥前缀。私钥头必须排在 \b 之外——它以 '-' 开头，
     # 前面加 \b 会因「非词字符之间无边界」而永远匹配不上（实测踩过）。
     ("credential_literal",
@@ -226,11 +231,28 @@ def validate_submit(payload: dict) -> list:
 
     for f in ("title", "tags", "model", "problem", "solution"):
         need(f)
+    # 类型必须显式是字符串。红队实测（RT-C1）：tags 传字符串能绕过「空白标签」检查
+    # 投稿成功，落进 experiences.json 后网站渲染层 (r.tags||[]).slice().map() 对
+    # 字符串抛 TypeError —— 一条投稿打挂整站渲染。类型在门口验，别指望渲染层兜底。
+    for f in ("title", "model", "problem", "solution"):
+        v = payload.get(f)
+        if v is not None and not isinstance(v, str):
+            errs.append({"field": f, "reason": f"{f} 必须是字符串（收到：{type(v).__name__}）"})
+    # 体量上限（红队 RT-E1：5000 条 dead_ends 投稿被接受、耗时 8s）。限额远高于
+    # 存量极值（title 80 字符 / problem 290 / solution 621 / dead_ends 6 条），只拦滥用。
+    LIMITS = {"title": 200, "model": 120, "problem": 8000, "solution": 8000,
+              "result": 8000, "retrospective": 8000}
+    for f, cap in LIMITS.items():
+        v = payload.get(f)
+        if isinstance(v, str) and len(v) > cap:
+            errs.append({"field": f, "reason": f"{f} 超长（{len(v)} 字符，上限 {cap}）"})
     de = payload.get("dead_ends")
     if not isinstance(de, list) or not de:
         errs.append({"field": "dead_ends",
                      "reason": "缺少必填字段: dead_ends（死胡同是本库的差异化价值，空数组等同没内容）"})
     else:
+        if len(de) > 50:
+            errs.append({"field": "dead_ends", "reason": f"dead_ends 过多（{len(de)} 条，上限 50）"})
         for i, d in enumerate(de):
             if not isinstance(d, dict):
                 errs.append({"field": f"dead_ends[{i}]",
@@ -240,8 +262,16 @@ def validate_submit(payload: dict) -> list:
                 if not str(d.get(k) or "").strip():
                     errs.append({"field": f"dead_ends[{i}].{k}",
                                  "reason": f"dead_ends[{i}] 缺子字段: {k}"})
-    if isinstance(payload.get("tags"), list) and any(not str(t).strip() for t in payload["tags"]):
-        errs.append({"field": "tags", "reason": "tags 里不能有空白字符串"})
+    tags = payload.get("tags")
+    if not isinstance(tags, list):
+        errs.append({"field": "tags",
+                     "reason": "tags 必须是字符串数组，例如 [\"python\", \"爬虫\"]"
+                               + (f"（收到：{type(tags).__name__}）" if tags is not None else "")})
+    else:
+        if len(tags) > 20:
+            errs.append({"field": "tags", "reason": f"tags 过多（{len(tags)} 个，上限 20）"})
+        if any(not isinstance(t, str) or not t.strip() for t in tags):
+            errs.append({"field": "tags", "reason": "tags 里不能有空白项或非字符串项"})
     # status / confidence / verified 由服务端与人工锁死。接受提交方指定 =
     # 把「人在把关」这个承诺拆了。
     # verified 尤其要紧：它是「这条结论有人真跑过、可复现」的标记，也是 A 档的门槛
@@ -276,6 +306,16 @@ def _write_recipe(rid: str, record: dict) -> str:
     return md_path
 
 
+def _atomic_write(path: str, content: str):
+    """临时文件 + os.replace 原子落盘。读侧（网站 fetch / MCP loadData）永不见半截 JSON。
+    红队 RT-F 观察项：并发投稿下全表重写存在丢更新窗口，本函数先消除「读到撕裂文件」。"""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(content)
+    os.replace(tmp, path)
+
+
 def sync_experiences():
     """把 recipes/*.md 的 frontmatter 同步进 api/experiences.json。
 
@@ -291,9 +331,8 @@ def sync_experiences():
                 fm = parse_frontmatter(f.read())
             if fm:
                 recipes.append(fm)
-    os.makedirs(os.path.dirname(EXP_JSON), exist_ok=True)
-    with open(EXP_JSON, "w", encoding="utf-8") as f:
-        json.dump(recipes, f, ensure_ascii=False, indent=2, default=str)
+    _atomic_write(EXP_JSON,
+                  json.dumps(recipes, ensure_ascii=False, indent=2, default=str))
 
 
 def submit_recipe(payload: dict) -> dict:
@@ -365,6 +404,14 @@ def submit_recipe(payload: dict) -> dict:
 
 
 def read_recipe(rid: str) -> dict:
+    # id 必须先过与投稿同一套格式校验再拼路径。红队实测（RT-A1/A2）：
+    # 无校验时 promote_recipe("../x") 相对穿越可改写仓库外文件，
+    # 盘符绝对路径（如 "C:/tmp/victim"）更会让 os.path.join 丢弃前缀、
+    # 覆盖任意可写文件。投稿侧早有 ID_RE 把关，读取/晋升侧此前漏了。
+    if not ID_RE.match(str(rid or "")):
+        raise WriteError([{"field": "id",
+                           "reason": f"id 格式非法：{rid}。只允许小写字母、数字与中间的短横线"
+                                     f"（形如 recipe-sqlite-wal）"}])
     md_path = os.path.join(RECIPES_DIR, f"{rid}.md")
     if not os.path.exists(md_path):
         raise WriteError([{"field": "id",
@@ -520,6 +567,7 @@ def rebuild():
               "请 `pip install pyyaml` 后重试 rebuild。")
         return
     recipes = []
+    skipped = []
     if os.path.isdir(RECIPES_DIR):
         for fn in sorted(os.listdir(RECIPES_DIR)):
             if not fn.endswith(".md"):
@@ -529,25 +577,34 @@ def rebuild():
             fm = parse_frontmatter(text)
             if fm:
                 recipes.append(fm)
-    # 重建 experiences.json
-    os.makedirs(os.path.dirname(EXP_JSON), exist_ok=True)
-    with open(EXP_JSON, "w", encoding="utf-8") as f:
-        # default=str 兜底：YAML 可能把 created_at 等解析为 date/datetime 对象，
-        # json 无法直接序列化，统一转字符串避免 rebuild 中途崩溃。
-        json.dump(recipes, f, ensure_ascii=False, indent=2, default=str)
+            else:
+                skipped.append(fn)
+    # 红队 RT-G1：坏 .md 被静默跳过，rebuild 照常产出索引 —— 库少了一条没人知道。
+    # 现在必须把跳过清单拍在维护者脸上：重建结果不完整，就是要喊出来。
+    if skipped:
+        print(f"❌ 重建不完整：{len(skipped)} 个 .md 无法解析，已从索引剔除：")
+        for fn in skipped:
+            print(f"  - {fn}")
+        print("   请人工修复或删除上述文件后重跑 rebuild。")
+    # 重建 experiences.json（原子写：读侧永不见半截文件）
+    _atomic_write(EXP_JSON,
+                  # default=str 兜底：YAML 可能把 created_at 解析为 date 对象，json 无法直接序列化
+                  json.dumps(recipes, ensure_ascii=False, indent=2, default=str))
     print(f"✅ 已重建 {EXP_JSON}（{len(recipes)} 条）")
-    # 重建 llms.txt（仅 published）
+    # 重建 llms.txt（仅 published，原子写）
     pub = [r for r in recipes if r.get("status") == "published"]
-    with open(LLMS_TXT, "w", encoding="utf-8") as f:
-        f.write("# 暨南解题配方库 (agent-recipe-book)\n")
-        f.write("> 人类解题经验的机器可读共享库。每条配方含 模型/skill/harness/硬件 与结构化死胡同。\n\n")
-        f.write("## 索引\n")
-        for r in pub:
-            sol = (r.get("solution") or "")[:40]
-            f.write(f"- recipes/{r['id']}.md: {r.get('title','')} — {sol}\n")
-        f.write("\n## 如何被 Agent 读取\n")
-        f.write("GET api/experiences.json 获取全量结构化数据；GET llms.txt 获取索引。\n")
-        f.write("详见 CONTRIBUTING.md 与 recipe.schema.md (v3.0)。\n")
+    lines = [
+        "# 暨南解题配方库 (agent-recipe-book)\n",
+        "> 人类解题经验的机器可读共享库。每条配方含 模型/skill/harness/硬件 与结构化死胡同。\n\n",
+        "## 索引\n",
+    ]
+    for r in pub:
+        sol = (r.get("solution") or "")[:40]
+        lines.append(f"- recipes/{r['id']}.md: {r.get('title','')} — {sol}\n")
+    lines.append("\n## 如何被 Agent 读取\n")
+    lines.append("GET api/experiences.json 获取全量结构化数据；GET llms.txt 获取索引。\n")
+    lines.append("详见 CONTRIBUTING.md 与 recipe.schema.md (v3.0)。\n")
+    _atomic_write(LLMS_TXT, "".join(lines))
     print(f"✅ 已重建 {LLMS_TXT}（公开 {len(pub)} 条）")
 
 

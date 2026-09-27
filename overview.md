@@ -79,13 +79,14 @@ M1 让投稿进得来，M2 补的是「人怎么把池子里那条捞出来看�
 ## 验证
 
 ```
-npm test   →  exit=0，273 项断言全绿（9 个测试文件），recipes/ 与索引零污染
+npm test   →  exit=0，278 项断言全绿（9 个测试文件），recipes/ 与索引零污染
 rebuild    →  幂等无漂移
 ```
 
-> 📏 **断言数口径（2026-09-27 校准）**：以「各测试文件自报通过数之和」为准 = **273**。
+> 📏 **断言数口径（2026-09-27 红队后校准）**：以「各测试文件自报通过数之和」为准 = **278**。
 > 9 个文件：search-baseline 46 · search-pagination 14 · search-quarantine 26 · mcp-smoke 64 ·
-> agent-prompts 20 · write-mcp 25 · verify-citations 14 · ingest 20 · ingest-write 44。
+> agent-prompts 20 · write-mcp 30 · verify-citations 14 · ingest 20 · ingest-write 44。
+> （273 → 278：红队回归 RT-1~RT-5 五项，见 `../_scratch/redteam.py` 与报告）
 > 本文件曾写 281（来路不明）与 253（M1 期口径，当时少 3 套件），均与实跑不符。
 > **别用 `✅` 符号计数**（会把装饰性输出算进去，得 277），也**别用 grep 一行汇总**
 > （套件输出格式不统一，会漏）。

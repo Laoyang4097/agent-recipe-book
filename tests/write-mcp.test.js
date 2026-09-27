@@ -148,6 +148,40 @@ try {
   check("A-6 纯中文标题未给 id 时被拒",
     (r5.body.errors || []).some((e) => e.field === "id"), JSON.stringify(r5.body));
 
+  // ===== 红队回归（2026-09-27 实测打穿后固化）=====
+  // RT-A1/A2：read_recipe 曾不校验 id 就拼路径 —— "../x" 相对穿越改写仓库外文件，
+  // "C:/..." 盘符绝对路径让 os.path.join 丢弃前缀、覆盖任意文件。堵法：id 一律过 ID_RE。
+  section("RT-1/RT-2  路径穿越 id 一律格式非法（红队回归）");
+  const rt1 = await callTool(s, "promote_recipe", { id: "../escape", confidence: "B" });
+  check("RT-1 相对穿越 id 被拒",
+    (rt1.body.errors || []).some((e) => e.field === "id" && /格式非法/.test(e.reason)),
+    JSON.stringify(rt1.body));
+  const rt2 = await callTool(s, "promote_recipe", { id: "C:/temp/victim", confidence: "B" });
+  check("RT-2 盘符绝对路径 id 被拒",
+    (rt2.body.errors || []).some((e) => e.field === "id" && /格式非法/.test(e.reason)),
+    JSON.stringify(rt2.body));
+  // RT-B1/B2：脱敏曾漏全角冒号与中文键名 —— "password：xxx" / "密码：xxx" 整条放行入库。
+  section("RT-3/RT-4  脱敏识别全角冒号与中文键名（红队回归）");
+  const rt3 = await callTool(s, "submit_recipe", {
+    ...FULL, id: "recipe-write-test-tmp4", problem: "配置是 password：abc123456789，然后就好了",
+  });
+  check("RT-3 全角冒号凭据被拦",
+    (rt3.body.errors || []).some((e) => /脱敏|凭据|内网/.test(e.reason)), JSON.stringify(rt3.body));
+  const rt4 = await callTool(s, "submit_recipe", {
+    ...FULL, id: "recipe-write-test-tmp5", problem: "把 密码：abc123456789 填进表单",
+  });
+  check("RT-4 中文键名凭据被拦",
+    (rt4.body.errors || []).some((e) => /脱敏|凭据|内网/.test(e.reason)), JSON.stringify(rt4.body));
+  // RT-C1：tags 传字符串曾绕过校验入库，网站渲染层 slice().map() 对字符串抛 TypeError，
+  // 一条投稿打挂整站。堵法：validate_submit 显式要求 tags 是数组。
+  section("RT-5  tags 必须是数组（红队回归）");
+  // 双层防御：MCP 入口层先报 -32602（调用方式错），内核 validate_submit 再兜底业务层。
+  // 红队实测时入口层已挡住，内核层是这次补的——两层数据形态不同，断言都要认。
+  const rt5 = await callTool(s, "submit_recipe", { ...FULL, id: "recipe-write-test-tmp6", tags: "not-a-list" });
+  const rt5bad = rt5.err || (rt5.body && rt5.body.errors);
+  check("RT-5 tags 字符串被拒（协议层或业务层）",
+    !!rt5bad && /数组/.test(JSON.stringify(rt5bad)), JSON.stringify(rt5.err || rt5.body));
+
   section("AC-4.2 / AC-4.3  隔离态：搜不到，但看得见");
   const r6 = await callTool(s, "search_recipes", { query: "Git Bash 的 tmp 目录" });
   const hitIds = ((r6.body || {}).results || []).map((r) => r.id);
