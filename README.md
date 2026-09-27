@@ -133,3 +133,4 @@ node mcp/server.js              # 挂载说明见 mcp/README.md
 - **配方数据**（`recipes/*.md` 及 `api/experiences.json` 的内容）：[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/deed.zh)
   可转载、可改编，须署名并以相同方式共享。
 - **投稿即授权（双轨）**：向本库提交配方，即表示同意内容以 CC BY-SA 4.0 随库发布，**并授予库维护者不受"相同方式共享"约束的商用使用权**（详见 [CONTRIBUTING.md](CONTRIBUTING.md)）。
+- **名称与品牌**：「agent-recipe-book / 解题配方库」名称及标识归维护者所有。Fork 与二次分发**请更换项目名称与标识**，不得暗示与本项目官方服务有关联。代码与数据按上述协议自由使用，与名称无关。
