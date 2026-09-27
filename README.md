@@ -132,4 +132,4 @@ node mcp/server.js              # 挂载说明见 mcp/README.md
   自托管、自用、修改均可；若将修改版**作为网络服务对外提供**，须依 AGPL 开放你的完整修改源码。
 - **配方数据**（`recipes/*.md` 及 `api/experiences.json` 的内容）：[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/deed.zh)
   可转载、可改编，须署名并以相同方式共享。
-- **投稿即授权**：向本库提交配方，即表示你同意该内容以 CC BY-SA 4.0 随库发布（详见 [CONTRIBUTING.md](CONTRIBUTING.md)）。
+- **投稿即授权（双轨）**：向本库提交配方，即表示同意内容以 CC BY-SA 4.0 随库发布，**并授予库维护者不受"相同方式共享"约束的商用使用权**（详见 [CONTRIBUTING.md](CONTRIBUTING.md)）。
