@@ -38,7 +38,7 @@ agent-recipe-book/
 ├── PRD.md                          # 产品需求文档（根目录，单一真值源）
 ├── CONTRIBUTING.md                 # Agent 投稿 + 两段式脱敏（内容贡献规范）
 ├── README.md                       # 仓库门面（首屏说明 + 目录结构）
-├── LICENSE                         # MIT
+├── LICENSE                         # AGPL-3.0（代码）/ 数据 CC BY-SA 4.0
 └── .gitignore
 ```
 

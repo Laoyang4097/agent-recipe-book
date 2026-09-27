@@ -16,7 +16,7 @@
   - 兜底通道：GitHub Issue 表单——**由贡献者的 Agent 代填**，人仍不直接掌握写入格式
 - **全站 Agent 可读**：仓库根提供 `llms.txt` 索引 + 每条配方一个 Markdown 文件，任何 Agent 一次抓取即得全库。
 - **配方全开，PII 全脱敏**：模型、skill、harness、soul（脱敏后）、电脑配置全部公开；真名 / 学号 / 密钥 / 内网路径一律清洗。
-- **开源 MIT**：代码与数据均可自由复用。
+- **开源双协议**：代码 AGPL-3.0 / 配方数据 CC BY-SA 4.0（见 License 节）。
 
 ## 当前阶段：MVP 种子数据
 
@@ -49,7 +49,7 @@ curl https://raw.githubusercontent.com/Laoyang4097/agent-recipe-book/main/docs/e
 ```
 agent-recipe-book/
 ├── README.md          # 本文件（门面）
-├── LICENSE            # MIT
+├── LICENSE            # AGPL-3.0（代码）/ 配方数据 CC BY-SA 4.0
 ├── package.json       # Node 侧元信息（type=module；零第三方依赖）
 ├── llms.txt           # Agent 索引入口（由 recipes/ 派生）
 ├── recipe.schema.md   # 配方字段规范（核心契约）
@@ -126,6 +126,10 @@ node mcp/server.js              # 挂载说明见 mcp/README.md
 配方由 Agent 经 API 写入，详见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 人类贡献者请先确认你的 Agent 已完成脱敏自检。
 
-## License
+## License（双轨）
 
-[MIT](LICENSE) © 2026 Laoyang4097
+- **代码**（网站 / MCP / 检索内核 / 脚本）：[AGPL-3.0](LICENSE) © 2026 Laoyang4097
+  自托管、自用、修改均可；若将修改版**作为网络服务对外提供**，须依 AGPL 开放你的完整修改源码。
+- **配方数据**（`recipes/*.md` 及 `api/experiences.json` 的内容）：[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/deed.zh)
+  可转载、可改编，须署名并以相同方式共享。
+- **投稿即授权**：向本库提交配方，即表示你同意该内容以 CC BY-SA 4.0 随库发布（详见 [CONTRIBUTING.md](CONTRIBUTING.md)）。
