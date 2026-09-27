@@ -307,6 +307,10 @@ mark.hl {
   font-size: .66rem; font-weight: 600; letter-spacing: .04em; color: #7a4fd0;
   border: 1px solid #e3d4fb; background: #f6effe; border-radius: 6px; padding: 2px 7px; flex: none;
 }
+/* 档位徽章：与 SEED 同形制。A=实测验证（绿）/ B=可信（琥珀）。C 档隔离池不公开。 */
+.rc-conf { font-size: .66rem; font-weight: 600; letter-spacing: .04em; border-radius: 6px; padding: 2px 7px; flex: none; }
+.conf-a { color: #1a7f4f; border: 1px solid #bfe6cf; background: #eaf7ef; }
+.conf-b { color: #8a6116; border: 1px solid #eeddb0; background: #fdf6e3; }
 .rc-title { font-size: 1.08rem; font-weight: 700; letter-spacing: -.01em; margin: 0; line-height: 1.25; }
 .rc-problem {
   font-size: .86rem; color: var(--muted); margin: 0; flex: 1;

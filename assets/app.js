@@ -178,6 +178,9 @@ import { TAG_HINTS, GROUPS, searchRecipes } from "../lib/search.js";
         renderGroups();
         renderTags(); // 领域变了，标签胶囊要跟着换一批（render() 不负责它）
         render();
+        // 分组条在 Hero 区、列表在下一屏开外——点完不滚动，用户会以为"没反应"
+        //（2026-09-27 用户实测反馈：切组后感觉列表没变，其实滤了只是看不见）。
+        goToResults();
       });
       box.appendChild(b);
     });
@@ -214,8 +217,10 @@ import { TAG_HINTS, GROUPS, searchRecipes } from "../lib/search.js";
       card.setAttribute("aria-label", "查看配方详情：" + r.title);
       const tags = (r.tags || []).slice(0, 2).map((t) => `<span class="rc-tag">${esc(t)}</span>`).join("");
       const seed = r.seed ? `<span class="rc-seed">SEED</span>` : "";
+      // 档位徽章：A=人工复核+实测可复现（绿），B=人工复核可信（黄）。C 档在隔离池不公开，不会出现。
+      const conf = confBadge(r);
       card.innerHTML = `
-        <div class="rc-top"><div class="rc-tags">${tags}</div>${seed}</div>
+        <div class="rc-top"><div class="rc-tags">${tags}</div>${conf}${seed}</div>
         <h3 class="rc-title">${highlight(r.title, terms)}</h3>
         <p class="rc-problem">${highlight(snippet(r.problem, terms, 150), terms)}</p>
         <div class="rc-foot"><span class="rc-deadn">${(r.dead_ends || []).length} 条死胡同</span><span>${esc(r.model || "")}</span></div>
@@ -347,6 +352,13 @@ import { TAG_HINTS, GROUPS, searchRecipes } from "../lib/search.js";
     bd.addEventListener("click", close);
     document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
   }
+  /* 档位徽章：A=实测验证 / B=可信。C 档在隔离池、从不进网站数据，此函数不会产出 C。 */
+  function confBadge(r) {
+    if (r.confidence === "A") return '<span class="rc-conf conf-a" title="人工复核通过 + 实测可复现">实测验证</span>';
+    if (r.confidence === "B") return '<span class="rc-conf conf-b" title="人工复核可信">可信</span>';
+    return "";
+  }
+
   function openDrawer(r) {
     lastFocus = document.activeElement;
     const c = $("#drawer-content");
@@ -357,7 +369,7 @@ import { TAG_HINTS, GROUPS, searchRecipes } from "../lib/search.js";
         <span class="de-signal">提前信号：${esc(d.early_signal || "—")} · 耗时：${esc(d.duration || "—")}</span></li>`
     ).join("");
     c.innerHTML = `
-      <div class="dr-tags">${tags}${r.seed ? '<span class="rc-seed">SEED</span>' : ""}</div>
+      <div class="dr-tags">${tags}${confBadge(r)}${r.seed ? '<span class="rc-seed">SEED</span>' : ""}</div>
       <h2 class="dr-title">${esc(r.title)}</h2>
       <p class="dr-meta">${esc(r.id)} · ${esc(r.model || "n/a")} · ${esc(r.status || "")} · 贡献者 ${esc(r.contributor_id || "anon")}</p>
       <div class="dr-block"><div class="dr-label">问题</div><p>${esc(r.problem || "")}</p></div>
