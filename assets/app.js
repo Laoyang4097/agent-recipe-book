@@ -22,6 +22,8 @@ import { TAG_HINTS, GROUPS, searchRecipes } from "../lib/search.js";
 
   let RECIPES = [];
   const activeTags = new Set();
+  let page = 1;
+  const PAGE_SIZE = 24; // 每页卡片数；翻页走内核 offset/limit，与 MCP 同一条分页路径
   let query = "";
   let lastFocus = null; // 抽屉关闭后把键盘焦点归还给原卡片（a11y）
 
@@ -101,6 +103,7 @@ import { TAG_HINTS, GROUPS, searchRecipes } from "../lib/search.js";
       b.addEventListener("click", () => {
         if (activeTags.has(t)) { activeTags.delete(t); b.classList.remove("active"); }
         else { activeTags.add(t); b.classList.add("active"); }
+        page = 1; // 筛选变化回到第 1 页
         render();
       });
       box.appendChild(b);
@@ -175,6 +178,7 @@ import { TAG_HINTS, GROUPS, searchRecipes } from "../lib/search.js";
         activeGroup = g.key;
         activeTags.clear();
         tagsExpanded = false;
+        page = 1; // 筛选变化回到第 1 页
         renderGroups();
         renderTags(); // 领域变了，标签胶囊要跟着换一批（render() 不负责它）
         render();
@@ -193,12 +197,19 @@ import { TAG_HINTS, GROUPS, searchRecipes } from "../lib/search.js";
     return searchRecipes(RECIPES, query, {
       tags: [...activeTags],
       predicate: groupOf().match,
+      offset: (page - 1) * PAGE_SIZE,
+      limit: PAGE_SIZE,
     });
   }
 
   function render() {
     const grid = $("#grid");
-    const res = runSearch();
+    let res = runSearch();
+    // 越界防御：筛选条件收窄后页码可能超界（如在页 3 清空搜索），退回第 1 页重跑
+    if (res.matched > 0 && res.results.length === 0 && page > 1) {
+      page = 1;
+      res = runSearch();
+    }
     const list = res.results.map((x) => x.recipe);
     const terms = res.terms;
     const filtering = activeTags.size > 0 || !!query || activeGroup !== "all";
@@ -231,6 +242,51 @@ import { TAG_HINTS, GROUPS, searchRecipes } from "../lib/search.js";
       });
       grid.appendChild(card);
     });
+    renderPagination(res.matched);
+  }
+
+  /* 分页条：页码来自内核 matched / PAGE_SIZE，翻页仍走内核 offset/limit——
+     与 MCP 同一条分页路径，不自造第二套切片逻辑。>9 页折叠为 1 … n-1 n n+1 … 尾。 */
+  function renderPagination(matched) {
+    const box = $("#pager");
+    if (!box) return;
+    const totalPages = Math.max(1, Math.ceil(matched / PAGE_SIZE));
+    if (totalPages <= 1) { box.hidden = true; box.innerHTML = ""; return; }
+    box.hidden = false;
+    const pages = new Set([1, totalPages, page - 1, page, page + 1]);
+    const seq = [...pages].filter((n) => n >= 1 && n <= totalPages).sort((a, b) => a - b);
+    const btn = (label, target, opts = {}) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "pg-btn" + (opts.current ? " current" : "") + (opts.mute ? " mute" : "");
+      if (opts.current) b.setAttribute("aria-current", "page");
+      if (opts.aria) b.setAttribute("aria-label", opts.aria);
+      b.textContent = label;
+      b.addEventListener("click", () => {
+        if (page === target) return;
+        page = target;
+        render();
+        // 翻页后回到列表顶部（无落点闪烁，比切分组安静）
+        const el = document.getElementById("recipes");
+        const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+      });
+      return b;
+    };
+    box.innerHTML = "";
+    box.appendChild(btn("首页", 1, { aria: "第一页", mute: page === 1 }));
+    box.appendChild(btn("‹", page - 1, { aria: "上一页", mute: page === 1 }));
+    seq.forEach((n, i) => {
+      if (i > 0 && n - seq[i - 1] > 1) {
+        const dots = document.createElement("span");
+        dots.className = "pg-dots";
+        dots.textContent = "…";
+        box.appendChild(dots);
+      }
+      box.appendChild(btn(String(n), n, { current: n === page }));
+    });
+    box.appendChild(btn("›", page + 1, { aria: "下一页", mute: page === totalPages }));
+    box.appendChild(btn("末页", totalPages, { aria: "最后一页", mute: page === totalPages }));
   }
 
   /* 搜索/筛选的即时反馈：显示在 Hero 视口内，用户不必下翻才知道筛出来了。
@@ -306,6 +362,7 @@ import { TAG_HINTS, GROUPS, searchRecipes } from "../lib/search.js";
         activeTags.add(t);
         const pill = [...document.querySelectorAll("#tags .pill")].find((x) => x.textContent === t);
         if (pill) pill.classList.add("active");
+        page = 1; // 筛选变化回到第 1 页
         render();
       });
     });
@@ -333,6 +390,7 @@ import { TAG_HINTS, GROUPS, searchRecipes } from "../lib/search.js";
       clearTimeout(debTimer);
       debTimer = setTimeout(() => {
         query = val.trim().toLowerCase();
+        page = 1; // 筛选变化回到第 1 页
         render();
       }, 150);
     });

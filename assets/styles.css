@@ -321,6 +321,19 @@ mark.hl {
 .rc-deadn { color: var(--ink-2); }
 .empty { text-align: center; color: var(--muted-2); padding: 40px 0; }
 
+/* ---------- 分页条 ---------- */
+.pager { display: flex; justify-content: center; align-items: center; gap: 6px; padding: 26px 0 6px; flex-wrap: wrap; }
+.pg-btn {
+  cursor: pointer; font-family: var(--font-mono); font-size: .84rem; font-weight: 500;
+  min-width: 34px; padding: 6px 10px; border-radius: 9px;
+  color: var(--muted); background: #fff; border: 1px solid var(--border-strong);
+  transition: border-color .18s var(--ease), color .18s var(--ease), background .18s var(--ease);
+}
+.pg-btn:hover:not(.current):not(.mute) { color: var(--accent-ink); border-color: var(--accent-ink); }
+.pg-btn.current { color: #fff; background: var(--accent-ink, #4b5bd7); border-color: transparent; font-weight: 700; cursor: default; }
+.pg-btn.mute { opacity: .38; cursor: default; }
+.pg-dots { color: var(--muted-2); font-family: var(--font-mono); padding: 0 2px; }
+
 /* ---------- Footer ---------- */
 .site-footer { border-top: 1px solid var(--border); background: var(--bg-soft); }
 .foot-inner {
