@@ -15,7 +15,10 @@
 | `02_数字基线.md`（内部维护，不公开） | **所有对外数字的唯一种源**（断言数 / 条数 / 耗时） | 引用数字、核对口径时 |
 
 > ⚠️ **数字纪律**：本 PRD 里出现的每个数字都必须能在 `02_数字基线.md` 里找到出处。
-> 教训：断言数口径曾连错三次（177 → 257 → 271 → 273），两次都出在"一行 grep 汇总"上。
+> 教训：断言数口径曾连错四次（177 → 257 → 271 → 278），三次都出在"一行 grep 汇总"上。
+> **2026-10-01 起根因已修（BL-020）**：断言数不再由人汇总，改由 `npm test` 末行自报
+> （`总计（9/9 个文件）：X 通过 / Y 失败`），且任何测试文件口径漂移都会让该命令当场退出非零。
+> 因此本 PRD **不再复写断言数**——要数字就跑 `npm test | tail -1`。
 
 ## 回写记录
 
@@ -118,7 +121,7 @@
 4. **F-04 机器可读接口**：自动生成 `/llms.txt`（索引）+ `/api/experiences.json`（全量正文），每次新投稿重写。<br>✅ **已交付**：`rebuild` 幂等零漂移；线上三条链接（首页 / JSON / `llms.txt`）均 200。
 5. **F-05 演示 Agent「经验向导」**：用 **WorkBuddy** 搭建，学生口述卡点 → 检索本库(llms.txt/JSON) → 返回破局法 + 死胡同提醒。<br>✅ **已实现并升级**：实际交付为「MCP 内置 prompts（`experience-guide`）+ `mcp/AGENT_PROMPT.md` 纯文本兜底」，实现"任意接入的 Agent 一连即自动上岗"。细化规格见 v1.2 §7。
 6. **F-06 贡献者表彰**：展示贡献次数/致谢榜（借鉴清华"清小搭"永久表彰模式，按 Agent/匿名标识计）。<br>⏸ **本期不做**：与"能被调用"主线无关（v1.2 §3 非目标）。
-7. **F-10 只读 MCP Server**：让 Agent 以 MCP 协议查询本库。<br>⬆️ **已从 P2 提升为 P0**（原判"非必需"被推翻，见 v1.2 §1.1 LLM Agent 是反应式的、不会主动"想起"来读本库；`llms.txt` 只解决"能被读"，MCP 解决"会被调用"）。<br>✅ **已实现**：`mcp/server.js`，4 个工具（search_recipes / get_recipe / list_tags / list_quarantine）。
+7. **F-10 只读 MCP Server**：让 Agent 以 MCP 协议查询本库。<br>⬆️ **已从 P2 提升为 P0**（原判"非必需"被推翻，见 v1.2 §1.1 LLM Agent 是反应式的、不会主动"想起"来读本库；`llms.txt` 只解决"能被读"，MCP 解决"会被调用"）。<br>✅ **已实现**：`mcp/server.js`，5 个只读工具（search_recipes / get_recipe / list_tags / list_quarantine / verify_citations）。
 
 ### P1（决赛前，增强体验）
 8. **F-07 主动惊喜推送**：**后续再说**（暂缓，不在 MVP 范围；待核心闭环验证后再评估是否加入）。
@@ -187,14 +190,15 @@
 
 ### 8.2 MCP Server（F-10，P0，已交付）
 
-`mcp/server.js`——stdio JSON-RPC，零依赖、零上传、无需 API Key。4 个工具 + 1 套内置 prompts：
+`mcp/server.js`——stdio JSON-RPC，零依赖、零上传、无需 API Key。5 个只读工具 + 1 套内置 prompts：
 
 | 工具 | 入参 | 出参要点 | 说明 |
 |---|---|---|---|
-| `search_recipes` | `query`（必填）、`tags?`（数组，AND 语义）、`limit?`、`offset?`、`include_quarantine?` | `results[]`（含 `matchPct` / `confidence` / `suspect`）、`returned`、`has_more`、`matched` | 需翻页确认后才可下"库里没有"的结论 |
+| `search_recipes` | `query`（必填）、`tags?`（数组，AND 语义）、`limit?`、`offset?`、`include_quarantine?`、`verify?` | `results[]`（含 `matchPct` / `confidence` / `suspect`）、`returned`、`has_more`、`matched`；`verify:true` 时另有 `citable_ids` | 需翻页确认后才可下"库里没有"的结论 |
 | `get_recipe` | `id` | 单条配方全文 | 按 id 精确取 |
 | `list_tags` | 无 | 可用分组与标签 | 供上层做筛选器 |
 | `list_quarantine` | `query?`（可选，给隔离项按匹配度排序） | C 级隔离项清单 | 审计视图，供人工复核；**只读，不提供放行操作**（放行由人在库侧完成） |
+| `verify_citations` | `answer`（必填）、`allowedIds`（数组） | `ok` / `cited` / `badIds` | **§8.3「防编造护栏」的运行时闸门**（BL-014）：纯字符串比对、零 LLM 参与，用来自查答案里的 `[recipe-xxx]` 引用是否越出 `citable_ids` |
 
 外加 `prompts/get(experience-guide)`：把「经验向导」的规矩固化进 server，**接入方不带任何自定义 Prompt 也能自动上岗**；`mcp/AGENT_PROMPT.md` 为纯文本兜底。
 
@@ -204,6 +208,9 @@
 - **L3 分级置信**：A ×1.0 / B ×0.85 / C ×0（默认隔离）。C 级若匹配度 ≥ `C_LEVEL_MATCH_THRESHOLD`（默认 **0.8**，由 `_calibrate_match_threshold.js` 以 8 条正例标定，0.8/0.85/0.9 三档真噪声率均 0%）且为首位命中，破例放行并标 `suspect: true`。**阈值自管，不作为工具参数开放给调用方**。
 > ⚠️ 该标定脚本当前**未注册到 `package.json` 的 scripts**，是手工跑一次的工具；标定结论以注释形式固化在 `lib/search.js` 顶部。复算需手动执行 `node _calibrate_match_threshold.js`（登记为 BL-028 的部分关闭项）。
 - **防编造**（`lib/verifyCitations.js`）：正则校验答案中的 `[recipe-XXX]`，越界引用全拦，保证零库外内容。
+  > 该库自 2026-09-27 起有实现、有测试，但**当时没有接进任何运行时路径**（"有库无闸门"，登记为 BL-014）。
+  > **2026-10-01 已接上**：`search_recipes` 的 `verify: true` 返回 `citable_ids`，配套只读工具 `verify_citations`
+  > 让调用方在交出答案前自查。至此这条护栏从"库里有"变成"链路上有"。
 - **分页**：`offset`（默认 0，上限 40，超限返回 JSON-RPC `-32602`）+ `limit`，返回 `has_more`。
 - **治理链四道闸门（2026-09-27 精确落点，已逐一核实）**：
 
@@ -250,8 +257,9 @@
   | 首屏子资源 | 3 个请求（`index.html` + `styles.css` + `app.js`，+ 数据 JSON） | 无第三方依赖 |
   | 建库耗时 | `rebuild` 幂等零漂移 | 连跑两次产物无变化 |
 
-- **质量门禁**：CI（GitHub Actions / ubuntu）跑 **9 个测试文件 / 278 项断言**，与本地 `npm test` 同一套。
+- **质量门禁**：CI（GitHub Actions / ubuntu）跑 **9 个测试文件**，与本地 `npm test` 同一套；断言数以 `npm test` 末行的「总计」为准（不在本文复写）。另有 `lint` job：ESLint + `ruff check` 为阻塞项。
   > ⚠️ 曾踩的坑：CI 一度只跑 2 个测试文件（`search-baseline` + `mcp-smoke`），等于"门禁只覆盖 2/9"——别人把写侧、隔离池、引用校验改坏了 CI 照样绿，这句"门禁"就是空话。已补齐并写进 CI 注释，附每套测试各守哪条线。
+  > 📏 **断言数的坑（2026-10-01 已结构性修复）**：9 个文件曾用 4 种收尾口径、总计无人打，于是这个数字被人用不同 grep 数成 177 / 257 / 271 / 278。现在 `npm test` 由 `tests/run-all.js` 串跑并**自报总计**，逐文件校验规范汇总行；哪个文件口径漂了就当场标红、让命令退出非零。故本文一律**不复写**该数字。
 - **可访问性**：全站无需登录即可读（Agent 与游客均可）。
 - **可维护性**：存储层 + 静态生成器 + 写侧工具的少量脚本实现；`tests/_harness.js` 统一测试样板（6 套测试共用，改一次六处生效）。
 - **合规**：所有公开内容经两段式脱敏；标注"AI 辅助经验，非官方认定"。
@@ -406,7 +414,7 @@
 
 | 维度 | 得分 | 说明 |
 |---|---|---|
-| **工程实现** | **~95%** | 278 断言、CI 9 套全绿、零第三方依赖、脱敏三条写路已核实。功能测试没找到真 bug；**红队测试找到 5 个，当日全修（§16.5）** |
+| **工程实现** | **~95%** | CI 9 套全绿、零第三方依赖、脱敏三条写路已核实、ESLint + ruff 已挂门禁（断言数不在此复写，跑 `npm test \| tail -1`）。功能测试没找到真 bug；**红队测试找到 5 个，当日全修（§16.5）** |
 | **工程成熟度** | **~85%** | 缺"被真正打过"的验证：~~并发、异常输入、从零重建~~ → **红队已覆盖异常输入与从零重建，残余风险只剩并发丢更新（低危，见 §16.5）** |
 | **产品验证** | **0%** | 至今无真人用过。这一项**无法靠写代码补** |
 

@@ -61,10 +61,20 @@ Agent 提交 JSON（submit_recipe）
    → 刷新 api/experiences.json（隔离池立刻可见，否则投稿完查不到，链路就断了）
    → 【停】等人点头
        ├─ promote(id, "B")：格式合规 + 死胡同齐全 + 脱敏通过 → status=published，进了主检索
-       ├─ promote(id, "A")：B 的基础上还需 result 或 verified 非空（禁 C→A 跳级）
-       └─ promote(id, "C")：驳回，退回隔离区
+       ├─ promote(id, "A")：B 的基础上还需 verified 为 true（人工复核后手写，投稿侧带不进来；禁 C→A 跳级）
+       └─ promote(id, "C")：驳回，退回隔离区（属**降档**，须显式 confirm_downgrade，见下）
    → 维护者跑一次 rebuild → llms.txt 更新，才真正对外公开
 ```
+
+**降档要二次确认（B→C / A→B / A→C）**：驳回是破坏性动作——一条已公开的配方会从公开索引
+消失。所以 `promote` 遇到降档会先「只回话、不落盘」：
+
+```bash
+python api/ingest.py promote <id> C                       # 返回 confirm_required，什么都没改
+python api/ingest.py promote <id> C --confirm-downgrade    # 确认后才真的退回隔离区
+```
+
+MCP 侧同理（`promote_recipe` 传 `confirm_downgrade: true`）。升档不受影响，照常一次生效。
 
 两头都要人：**投稿进得来，公开出得去**。少了后半段，隔离区就是个只进不出的死箱子；
 少了 `rebuild`，晋升后的配方在主检索里照样搜不到（`api/experiences.json` 与 `llms.txt`
@@ -96,7 +106,6 @@ python api/ingest.py promote <id> B    # 放行，或 A（有实测）/ C（驳�
 # ⑤ 跑一次 rebuild，晋升结果才真正对外可见
 python api/ingest.py rebuild
 ```
-
 > 第 3 步不能省。`api/experiences.json` 是工作副本，`llms.txt` 才是对外闸门。
 > 晋升完不 rebuild，配方在主检索里照样搜不到——这是 Q-2 拍板的取舍：
 > 宁可让人多跑一条命令，也不让"提交即入库"变成事实。
@@ -116,18 +125,31 @@ python api/ingest.py rebuild
 | 判定 | 命令 | 效果 |
 |---|---|---|
 | 可用但没验证 | `promote <id> B` | `confidence: B` + `status: published`，进主检索 |
-| 有实测证据 | 先 `B`，再 `A` | `confidence: A`，最高档 |
-| 存疑 / 不采用 | `promote <id> C` | 退回隔离池，暂不公开 |
+| 有实测证据 | 先 `B`，再 `A` | `confidence: A`，最高档（需人工置 `verified: true`） |
+| 存疑 / 不采用 | `promote <id> C --confirm-downgrade` | 退回隔离池，暂不公开 |
 
 - **禁跳级**：C 不能直接升 A，必须在 B 停一次。分级讲究的是台阶，不是电梯。
+- **降档要确认**：B→C / A→B / A→C 都属降档，不加 `--confirm-downgrade` 只会返回
+  `confirm_required` 且**不落盘**。升档不受影响。
 - **驳回 ≠ 删除**。驳回只是退回隔离区；确定是垃圾（重复投稿、空内容）再直接删文件。
 - **晋升只改状态，不碰内容**。发现内容有问题，改文件，不要指望 `promote` 帮你修。
 
 ## 6. 本地验证（开发者）
 
 ```bash
-npm test    # 全套：检索基线 / MCP 冒烟 / 引用校验 / 写侧端到端 / 投稿链路
+npm test         # 全套 9 个文件 / 296 项断言；末行会打「总计（9/9 个文件）：X 通过 / Y 失败」
+npm run lint     # ESLint（JS/Node 侧）+ ruff check（Python 侧）
+npm run format   # Prettier + ruff format（想只检查、不改文件：npm run format:check）
 ```
+
+> **断言数口径**：只看 `npm test` 最后一行。`tests/run-all.js` 会逐文件校验每个测试都打出了
+> 规范汇总行 `结果：N 通过 / M 失败`，少一个文件就会报「总计（8/9 个文件）」并退出非零。
+> 这就是为什么**不要**自己 grep 求和——旧账：同一个库被数成 177 / 257 / 271 / 281（见 `说明书_素材包/02_数字基线.md`）。
+
+> **风格约定先跑起来再提交**：`npm run format` 会自动改文件，不想手改就用它。
+> 前端三件套（`index.html` / `assets/`）与 `recipes/`、`llms.txt`、文档**不在**格式化范围内，
+> 原因写在 `.prettierignore` 里。首次贡献请先 `npm ci` 装 devDependencies；
+> Python 侧还需 `pip install ruff`。
 
 ```bash
 # 命令行直投一份 JSON（'-' 表示从 stdin 读，绕开 Windows 命令行长度限制）
@@ -135,12 +157,14 @@ python api/ingest.py submit - < path/to/recipe.json
 
 # 人工复核后放行
 python api/ingest.py promote <id> B
+# 驳回（降档，需显式确认）
+python api/ingest.py promote <id> C --confirm-downgrade
 # 重建对外索引（幂等，可重复跑）
 python api/ingest.py rebuild
 ```
 
 > ⚠️ **解释器坑（本机）**：PATH 上的 `python` 可能是不带 `pyyaml` 的解释器。
-> `npm test` 会自动挑一个能 `import yaml` 的（见 `tests/pybin.js`），
+> `npm test` 会自动挑一个能 `import yaml` 的（见 `lib/pybin.js`），
 > 命令行直调时请自己指定，例如 `PYTHON=<venv>/Scripts/python.exe python api/ingest.py rebuild`。
 > 两个 Python 测试文件都走 `node tests/run-python.js <file>`，别直接 `python xxx.test.py`。
 

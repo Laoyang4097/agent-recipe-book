@@ -53,7 +53,7 @@ Windows 上把 `/绝对路径/...` 换成盘符路径（如 `D:/项目/agent-rec
 
 ---
 
-## 提供了哪四个工具（默认态）
+## 提供了哪五个工具（默认态）
 
 | 工具 | 作用 | 何时会被调用 |
 |---|---|---|
@@ -61,8 +61,14 @@ Windows 上把 `/绝对路径/...` 换成盘符路径（如 `D:/项目/agent-rec
 | **`search_recipes`** | 关键词检索，返回按相关性排序的 Top N，每条含**结构化死胡同** | 主力工具。用户描述卡点后先检索，再决定要不要展开 |
 | **`get_recipe`** | 按 `id` 取某一条的完整内容 | `search_recipes` 已给出候选，需要看某条的完整细节时 |
 | **`list_quarantine`** | 列出**隔离池**（C 级）里的待复核稿 | 想接手「人复核」这一步时先看这里 |
+| **`verify_citations`** | 校验一段答案里的 `[recipe-xxx]` 引用是否都落在白名单内 | 准备把带引用的答案交出去之前，自查有没有编造引用 |
 
 开了 `RECIPE_BOOK_WRITE=1` 再加两个（`submit_recipe` / `promote_recipe`），见下方[《默认只读，写要显式开闸》](#默认只读写要显式开闸)。
+
+> **`verify_citations` 怎么用**（BL-014）：`search_recipes` 传 `"verify": true` 时，结果里会多一个
+> `citable_ids`（本次检索命中的可引用白名单）。Agent 组织完答案后，把答案文本连同这份白名单交给
+> `verify_citations`，它会指出哪些引用不在集合内（疑似编造）。**这是「防编造」从"有库"走到"有闸门"的那一步**——
+> 校验本身零 LLM 参与、纯字符串比对，所以结论可复现、可离线。
 
 ### `search_recipes` 入参与出参
 
@@ -115,7 +121,7 @@ Windows 上把 `/绝对路径/...` 换成盘符路径（如 `D:/项目/agent-rec
 RECIPE_BOOK_WRITE=1 node mcp/server.js
 ```
 
-开了之后工具列表从 4 个变 6 个，多出 `submit_recipe` 与 `promote_recipe`。
+开了之后工具列表从 5 个变 7 个，多出 `submit_recipe` 与 `promote_recipe`。
 不开就调它们，一律返回 `-32602`，不会执行到一半才发现是只读的。
 
 > **开闸前请先确认 Python 环境**（这条能省你半小时）。
