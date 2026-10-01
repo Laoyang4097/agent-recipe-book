@@ -7,13 +7,14 @@
 
 import { verifyCitations } from "../lib/verifyCitations.js";
 
-import { pass, failures, check, section } from "./_harness.js";
+import { check, section, done } from "./_harness.js";
 
 const ALLOWED = ["recipe-py-encoding-mojibake", "recipe-py-antibot-stop-on-hit"];
 
 section("一、全部合法 → 通过");
 {
-  const ans = "中文站乱码多半是编码问题 [recipe-py-encoding-mojibake]；被封就别硬刚 [recipe-py-antibot-stop-on-hit]。";
+  const ans =
+    "中文站乱码多半是编码问题 [recipe-py-encoding-mojibake]；被封就别硬刚 [recipe-py-antibot-stop-on-hit]。";
   const r = verifyCitations(ans, ALLOWED);
   check("ok = true", r.ok === true);
   check("cited 含两个 id", r.cited.length === 2 && r.badIds.length === 0, JSON.stringify(r));
@@ -21,7 +22,8 @@ section("一、全部合法 → 通过");
 
 section("二、出现越界（编造）id → 拦截");
 {
-  const ans = "你可以试试 fake-lib-xyz 的方法 [recipe-fake-lib-xyz]，但乱码请用 [recipe-py-encoding-mojibake]。";
+  const ans =
+    "你可以试试 fake-lib-xyz 的方法 [recipe-fake-lib-xyz]，但乱码请用 [recipe-py-encoding-mojibake]。";
   const r = verifyCitations(ans, ALLOWED);
   check("ok = false", r.ok === false);
   check("badIds 含编造 id", r.badIds.includes("recipe-fake-lib-xyz"), JSON.stringify(r));
@@ -59,9 +61,4 @@ section("六、大小写 / 非 recipe 前缀不误判为引用");
   check("cited 为空", r.cited.length === 0);
 }
 
-console.log(`\n=== 结果：${pass} 通过 / ${failures.length} 失败 ===`);
-if (failures.length) {
-  console.log("失败项：\n - " + failures.join("\n - "));
-  process.exit(1);
-}
-console.log("🎉 引用校验全部通过");
+done();

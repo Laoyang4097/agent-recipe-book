@@ -16,8 +16,8 @@
 
 import argparse
 import io
-import re
 import os
+import re
 import sys
 import tempfile
 
@@ -226,13 +226,16 @@ def main():
         print(f"\n--- {fn.__name__} ---")
         fn()
     total, bad = len(PASS) + len(FAIL), len(FAIL)
-    print(f"\n=== 结果：{total - bad} 通过 / {bad} 失败 ===")
     if bad:
+        print("\n失败清单：")
         for name, detail in FAIL:
             print(f"  ❌ {name}: {detail}")
+    # 收尾口径（BL-020）：最后一行必须是这一行，tests/run-all.js 靠它汇总总计。
+    # 原先末尾还有「🎉 全部通过」「通过项：…」两行，汇总行被夹在中间——
+    # 谁 grep 得到什么全看从哪头看，这正是断言数报出四个版本的原因之一。
+    print(f"\n结果：{total - bad} 通过 / {bad} 失败")
+    if bad:
         sys.exit(1)
-    print("🎉 投稿链路全部通过")
-    print(f"   通过项：{', '.join(PASS)}")
 
 
 if __name__ == "__main__":

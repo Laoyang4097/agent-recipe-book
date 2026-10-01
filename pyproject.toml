@@ -1,0 +1,35 @@
+# Python 侧静态检查约定（BL-015）
+#
+# 分两层，一紧一松，理由写在各自下面——本项目的门禁哲学是「韧性优先，不阻塞迭代」，
+# 所以「能证明是 bug 的」卡住，「只是不好看的」只提醒。
+
+[tool.ruff]
+line-length = 100
+# 与 .prettierrc.json 的 printWidth 对齐：两边同宽，跨语言改同一段逻辑不会一格一格对不上。
+target-version = "py39"
+exclude = ["recipes", "node_modules", ".git", "docs"]
+
+[tool.ruff.lint]
+# E = pycodestyle 错误（空白/缩进类真问题）；F = pyflakes（未定义名/未用导入，真 bug）
+# I = import 排序（可自动 fix）。故意不选 W（风格告警，噪声大）。
+select = ["E", "F", "I"]
+ignore = ["E501"]  # 超长行交给 formatter，不在这里卡
+
+# ↑ 这一层是**门禁**：`npm run lint:py` / CI 会挡住 PR。
+#   它拦的是真错误：F841 死变量、E402 导入位置、I001 导入乱序。
+#   落地当天实测全库 5 处问题，已全部修掉（2 处死变量 / 2 处导入乱序 / 1 处刻意 E402 加 noqa）。
+
+[tool.ruff.format]
+quote-style = "double"
+
+# ↑ 这一层**暂不当门禁**。原因不是懒：
+#   当前还有 4 个文件（api/ingest.py、api/issue_to_recipe.py、两个测试）会被格式化，
+#   合计约 740 行改动，全是缩进与换行。而 10/4 是技术冻结日——
+#   这种 diff 会造成两个具体伤害：
+#     1) 评审者无法从 diff 里看出「这次真正的逻辑改动是哪几行」；
+#     2) 与 PRD 里引用的行号、以及近期提交的 diff 一起漂移，追溯成本上升。
+#   所以：`ruff format --check` 只作为**非阻塞提醒**出现在 CI（continue-on-error），
+#   格式化本身登记为 BL-029，冻结后单独开一次「纯格式化」提交并同步重跑一遍测试。
+#   这与 BL-028（根目录脚本归位）是同一套判断：收益明确，但时点不对。
+#
+# 想手动格式化：npm run format

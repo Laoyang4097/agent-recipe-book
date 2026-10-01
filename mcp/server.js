@@ -25,8 +25,8 @@ import { readFileSync, statSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
-import path from "node:path";
 import { searchRecipes, listTags, GROUPS, confidenceOf } from "../lib/search.js";
+import { verifyCitations } from "../lib/verifyCitations.js";
 import { pickPython, pyCandidates } from "../lib/pybin.js";
 
 /* ---------------- 常量 ---------------- */
@@ -36,7 +36,7 @@ const SUPPORTED_PROTOCOLS = new Set(["2024-11-05", "2025-03-26", "2025-06-18"]);
 const DEFAULT_LIMIT = 5;
 const MAX_LIMIT = 20;
 const MAX_OFFSET_FLOOR = MAX_LIMIT * 2; // 下限：库很小时也别把 offset 卡死
-const MAX_OFFSET_HEADROOM = MAX_LIMIT;  // 在"正好翻完"之外再留一整页余量
+const MAX_OFFSET_HEADROOM = MAX_LIMIT; // 在"正好翻完"之外再留一整页余量
 
 /* offset 上限**不能**写死成"库当前几条"：那样库一涨，最后一页就翻不出来
    （40 条时正好卡在边界，涨到 41 条才开始有隐患，再涨就直接吞数据）。
@@ -75,7 +75,8 @@ function pythonBin() {
   _pyBin = pickPython();
   const ok = _pyBin !== (process.env.RECIPE_BOOK_PYTHON || process.env.PYTHON);
   process.stderr.write(
-    `[agent-recipe-book] 写侧解释器：${_pyBin}${ok ? "" : "（注意：这是 PATH 直出，可能缺 pyyaml）"}\n`);
+    `[agent-recipe-book] 写侧解释器：${_pyBin}${ok ? "" : "（注意：这是 PATH 直出，可能缺 pyyaml）"}\n`
+  );
   return _pyBin;
 }
 
@@ -104,8 +105,9 @@ function runIngest(argv, stdinPayload) {
     let msg = `写侧内核未返回结构化结果（exit=${r.status}）。${tail}`;
     // 「未安装 pyyaml」多半不是真缺依赖，而是挑错了解释器。直说，省得用户去装一个用不上的包。
     if (/pyyaml|YAMLError/i.test(r.stderr || "")) {
-      msg += ` 当前解释器：${py}。若它确实不带 pyyaml，用 RECIPE_BOOK_PYTHON 指定另一个；`
-           + `候选里有：${pyCandidates().slice(0, 4).join(" / ")}`;
+      msg +=
+        ` 当前解释器：${py}。若它确实不带 pyyaml，用 RECIPE_BOOK_PYTHON 指定另一个；` +
+        `候选里有：${pyCandidates().slice(0, 4).join(" / ")}`;
     }
     throw new RpcError(-32603, msg);
   }
@@ -138,7 +140,11 @@ function replyOk(id, result) {
   send({ jsonrpc: "2.0", id, result });
 }
 function replyErr(id, code, message, data) {
-  send({ jsonrpc: "2.0", id, error: data === undefined ? { code, message } : { code, message, data } });
+  send({
+    jsonrpc: "2.0",
+    id,
+    error: data === undefined ? { code, message } : { code, message, data },
+  });
 }
 function textResult(obj, isError = false) {
   const text = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
@@ -182,7 +188,7 @@ function optionalTags(args) {
   const v = args?.tags;
   if (v === undefined) return [];
   if (!Array.isArray(v) || v.some((t) => typeof t !== "string" || !t.trim())) {
-    throw new RpcError(-32602, "参数 tags 必须是字符串数组（如 [\"encoding\"]）");
+    throw new RpcError(-32602, '参数 tags 必须是字符串数组（如 ["encoding"]）');
   }
   return v.map((t) => t.trim());
 }
@@ -199,7 +205,10 @@ function optionalOffset(args, ceiling = MAX_OFFSET_FLOOR) {
   const v = args?.offset;
   if (v === undefined) return 0;
   if (!Number.isInteger(v) || v < 0 || v > ceiling) {
-    throw new RpcError(-32602, `参数 offset 必须是 0..${ceiling} 的整数（默认 0，用于翻页看后续结果）`);
+    throw new RpcError(
+      -32602,
+      `参数 offset 必须是 0..${ceiling} 的整数（默认 0，用于翻页看后续结果）`
+    );
   }
   return v;
 }
@@ -224,6 +233,7 @@ function toolSearchRecipes(args) {
   // 上限跟着实际库规模走，库涨到翻不完之前都不会静默吞数据
   const offset = optionalOffset(args, maxOffsetOf(data.recipes));
   const includeQuarantine = optionalQuarantine(args);
+  const verify = args.verify === true;
 
   const res = searchRecipes(data.recipes, query, { tags, limit, offset, includeQuarantine });
   const payload = {
@@ -250,6 +260,8 @@ function toolSearchRecipes(args) {
       retrospective: recipe.retrospective,
     })),
   };
+  // BL-014：verify:true 时附带「可引用白名单」，调用方据此用 verify_citations 复核引用
+  if (verify) payload.citable_ids = res.results.map((r) => r.recipe.id);
   if (res.hint) payload.hint = res.hint;
   return textResult(payload);
 }
@@ -296,7 +308,8 @@ function toolListQuarantine(args) {
     // 审计视图：列出全部 C 级隔离项（供人工复核，AC-3）
     return textResult({
       total: quarantine.length,
-      hint: "以上是 C 级（缓刑/存疑）隔离经验，默认不进 search_recipes 主检索。" +
+      hint:
+        "以上是 C 级（缓刑/存疑）隔离经验，默认不进 search_recipes 主检索。" +
         "传 query 可按匹配度给它们排序；亦可经 search_recipes(include_quarantine=true) 在检索时一并查看。",
       items: quarantine.map((r) => ({ id: r.id, title: r.title, tags: r.tags || [] })),
     });
@@ -307,8 +320,27 @@ function toolListQuarantine(args) {
     query,
     total: res.matched,
     items: res.results.map(({ recipe, matchPct, suspect }) => ({
-      id: recipe.id, title: recipe.title, tags: recipe.tags || [], matchPct, suspect,
+      id: recipe.id,
+      title: recipe.title,
+      tags: recipe.tags || [],
+      matchPct,
+      suspect,
     })),
+  });
+}
+
+/* BL-014：引用校验闸门——把 lib/verifyCitations 接到运行时，让调用方能复核编造引用 */
+function toolVerifyCitations(args) {
+  const answer = requireString(args, "answer");
+  const allowedIds = Array.isArray(args.allowedIds) ? args.allowedIds : [];
+  const res = verifyCitations(answer, allowedIds);
+  return textResult({
+    ok: res.ok,
+    cited: res.cited,
+    badIds: res.badIds,
+    hint: res.ok
+      ? "引用均落在白名单内。"
+      : "以下引用不在允许集合内，疑似编造，请重试或降级到原文：" + res.badIds.join(", "),
   });
 }
 
@@ -330,13 +362,15 @@ function toolSubmitRecipe(args) {
     payload[k] = args[k];
   }
   if (args.dead_ends !== undefined && !Array.isArray(args.dead_ends)) {
-    throw new RpcError(-32602,
-      "参数 dead_ends 必须是数组，每条含 attempt / failure / duration / early_signal 四段");
+    throw new RpcError(
+      -32602,
+      "参数 dead_ends 必须是数组，每条含 attempt / failure / duration / early_signal 四段"
+    );
   } else {
     payload.dead_ends = args.dead_ends;
   }
   if (args.tags !== undefined && !Array.isArray(args.tags)) {
-    throw new RpcError(-32602, "参数 tags 必须是字符串数组，例如 [\"encoding\", \"scrapy\"]");
+    throw new RpcError(-32602, '参数 tags 必须是字符串数组，例如 ["encoding", "scrapy"]');
   } else {
     payload.tags = args.tags;
   }
@@ -354,7 +388,11 @@ function toolSubmitRecipe(args) {
 function toolPromoteRecipe(args) {
   const id = requireString(args, "id");
   const confidence = requireString(args, "confidence").toUpperCase();
-  const res = runIngest(["promote", id, confidence]);
+  const confirm = args.confirm_downgrade === true;
+  const argv = ["promote", id, confidence];
+  if (confirm) argv.push("--confirm-downgrade");
+  const res = runIngest(argv);
+  if (res.confirm_required) return textResult(res); // BL-017：降档需二次确认，非错误
   return res.ok ? textResult(res) : businessFailure(res);
 }
 
@@ -369,7 +407,9 @@ const READ_TOOLS = [
     name: "search_recipes",
     buildDescription() {
       const data = loadData();
-      const tagNames = listTags(data.recipes).map((t) => t.tag).join(", ");
+      const tagNames = listTags(data.recipes)
+        .map((t) => t.tag)
+        .join(", ");
       return (
         "在「解题配方库」中检索别人踩过的坑。每条配方含：真实问题、结构化死胡同" +
         "（试过什么 / 结果如何 / 卡了多久 / 本可提前避开的信号）、最终解法与复盘。" +
@@ -401,14 +441,22 @@ const READ_TOOLS = [
           type: "integer",
           minimum: 0,
           maximum: LIVE_MAX_OFFSET,
-          description: `翻页偏移：从第几条开始返回（默认 0）。配合 limit 看「第 6 条往后」的结果。` +
+          description:
+            `翻页偏移：从第几条开始返回（默认 0）。配合 limit 看「第 6 条往后」的结果。` +
             `返回体 has_more=true 表示后面还有，应继续翻页或调大 limit 再查，才可下「库里没有」结论。`,
         },
         include_quarantine: {
           type: "boolean",
-          description: "默认 false：C 级（缓刑/存疑）经验不进主检索。" +
+          description:
+            "默认 false：C 级（缓刑/存疑）经验不进主检索。" +
             "设 true 时主结果包含全部 C 级（均标 suspect:true），供人工复核/审计（R-10 AC-3）。" +
             "注意：阈值(放行松紧)由服务端控制，不在此暴露。",
+        },
+        verify: {
+          type: "boolean",
+          description:
+            "默认 false。设 true 时返回附带 citable_ids（本次结果的可引用白名单），" +
+            "供你组织答案后用 verify_citations 工具复核 [recipe-xxx] 引用是否编造。",
         },
       },
       required: ["query"],
@@ -420,7 +468,7 @@ const READ_TOOLS = [
     description:
       "按 id 取一条配方的完整内容（含全部死胡同与复盘）。" +
       "何时用：search_recipes 已给出候选 id，需要看某一条的完整细节时。" +
-      "不存在时返回 {\"error\":\"not_found\"} 而不报错，请按 error 字段判断。",
+      '不存在时返回 {"error":"not_found"} 而不报错，请按 error 字段判断。',
     inputSchema: {
       type: "object",
       properties: {
@@ -454,6 +502,29 @@ const READ_TOOLS = [
     },
     run: toolListQuarantine,
   },
+  {
+    name: "verify_citations",
+    description:
+      "校验回答中的 [recipe-xxx] 引用是否全部落在允许的 id 集合内（PRD《防编造护栏》）。" +
+      "何时用：你组织完答案准备引用若干配方时，把回答文本与本次检索返回的 citable_ids 传入，" +
+      "确认没有凭空捏造的引用。返回 ok=false 时 badIds 列出越界引用，应重试或降级到原文。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        answer: {
+          type: "string",
+          description: "Agent 的回答文本，其中 [recipe-xxx] 形式的引用会被校验",
+        },
+        allowedIds: {
+          type: "array",
+          items: { type: "string" },
+          description: "允许引用的 id 白名单，来自 search_recipes(verify=true) 返回的 citable_ids",
+        },
+      },
+      required: ["answer"],
+    },
+    run: toolVerifyCitations,
+  },
 ];
 
 /* 写侧工具。只在 RECIPE_BOOK_WRITE=1 时挂进 tools/list——默认不给。
@@ -464,21 +535,22 @@ const WRITE_TOOLS = [
   {
     name: "submit_recipe",
     description:
-      "把一条踩坑经验提交进库。何时用：你和用户在对话里刚解决完一个真问题，"
-      + "想把这段经验存成配方，而不想让用户学 JSON、开终端。\n"
-      + "内容必须原样来自真实经历：脚本只做格式转换与体检，不会替你补内容、不会润色。"
-      + "缺哪个字段会逐条点名，你补齐后重试即可。\n"
-      + "提交后这条进隔离池（C 级，暂不进主检索），等人复核放行；"
-      + "成功回执里会写明下一步该做什么。\n"
-      + "status / confidence / verified 由服务端与人锁死，传了会被拒（A 档要的 verified "
-      + "只能由人复核后手写）。",
+      "把一条踩坑经验提交进库。何时用：你和用户在对话里刚解决完一个真问题，" +
+      "想把这段经验存成配方，而不想让用户学 JSON、开终端。\n" +
+      "内容必须原样来自真实经历：脚本只做格式转换与体检，不会替你补内容、不会润色。" +
+      "缺哪个字段会逐条点名，你补齐后重试即可。\n" +
+      "提交后这条进隔离池（C 级，暂不进主检索），等人复核放行；" +
+      "成功回执里会写明下一步该做什么。\n" +
+      "status / confidence / verified 由服务端与人锁死，传了会被拒（A 档要的 verified " +
+      "只能由人复核后手写）。",
     inputSchema: {
       type: "object",
       properties: {
         title: {
           type: "string",
-          description: "一句话说清解决什么。英文标题会自动推导 id；"
-            + "中文占一半以上的标题必须显式传 id（否则会推出 id / ip 这类猜不出含义的主键）",
+          description:
+            "一句话说清解决什么。英文标题会自动推导 id；" +
+            "中文占一半以上的标题必须显式传 id（否则会推出 id / ip 这类猜不出含义的主键）",
         },
         tags: {
           type: "array",
@@ -490,13 +562,15 @@ const WRITE_TOOLS = [
         solution: { type: "string", description: "最后怎么破的，可含可复现的操作步骤" },
         dead_ends: {
           type: "array",
-          description: "走过的死胡同，每条四段齐全：attempt(试过什么) / failure(结果如何) "
-            + "/ duration(卡了多久) / early_signal(本可提前避开的信号)",
+          description:
+            "走过的死胡同，每条四段齐全：attempt(试过什么) / failure(结果如何) " +
+            "/ duration(卡了多久) / early_signal(本可提前避开的信号)",
         },
         id: {
           type: "string",
-          description: "可选。库内唯一主键，小写英文短横线，如 recipe-sqlite-wal。"
-            + "不传时按标题推导；标题是纯中文则必须传。撞 id 会被拒绝，原内容不动",
+          description:
+            "可选。库内唯一主键，小写英文短横线，如 recipe-sqlite-wal。" +
+            "不传时按标题推导；标题是纯中文则必须传。撞 id 会被拒绝，原内容不动",
         },
         contributor: {
           type: "string",
@@ -510,13 +584,13 @@ const WRITE_TOOLS = [
   {
     name: "promote_recipe",
     description:
-      "人工复核后的放行动作：把一条隔离稿升到 B 级（可信）或 A 级（有实测证据），"
-      + "或驳回回隔离区。何时用：你已看过隔离池里的某条内容，判断它值不值得留。\n"
-      + "B 门槛：格式合规 + 死胡同四段齐全 + 脱敏复检通过。\n"
-      + "A 门槛：B 的基础上还要 verified 显式为 true —— 它是「有人真跑过一遍、结论可复现」"
-      + "的标记，投稿侧带不进来，只能由人确认后亲手写在 frontmatter 里。\n"
-      + "禁止跳级：C 不能直接升 A，须先在 B 停一次。\n"
-      + "本工具只改分级与状态，不碰内容一字——判断内容真伪是人的活儿。",
+      "人工复核后的放行动作：把一条隔离稿升到 B 级（可信）或 A 级（有实测证据），" +
+      "或驳回回隔离区。何时用：你已看过隔离池里的某条内容，判断它值不值得留。\n" +
+      "B 门槛：格式合规 + 死胡同四段齐全 + 脱敏复检通过。\n" +
+      "A 门槛：B 的基础上还要 verified 显式为 true —— 它是「有人真跑过一遍、结论可复现」" +
+      "的标记，投稿侧带不进来，只能由人确认后亲手写在 frontmatter 里。\n" +
+      "禁止跳级：C 不能直接升 A，须先在 B 停一次。\n" +
+      "本工具只改分级与状态，不碰内容一字——判断内容真伪是人的活儿。",
     inputSchema: {
       type: "object",
       properties: {
@@ -525,6 +599,13 @@ const WRITE_TOOLS = [
           type: "string",
           enum: ["A", "B", "C"],
           description: "A=完全信任（需实测证据）/ B=可信 / C=驳回回隔离区",
+        },
+        confirm_downgrade: {
+          type: "boolean",
+          description:
+            "降档二次确认（BL-017）：当目标分级低于当前（如 A→B、A→C、B→C）时，" +
+            "必须显式传 true 才会执行，否则返回 confirm_required 让你确认。" +
+            "升档（C→B→A）不需要。",
         },
       },
       required: ["id", "confidence"],
@@ -572,14 +653,16 @@ const PROMPTS = [
     args: [
       {
         name: "question",
-        description: "用户当前的卡点描述（自然语言）。填了会作为待回答的问题注入模板；不填则只返回通用手册。",
+        description:
+          "用户当前的卡点描述（自然语言）。填了会作为待回答的问题注入模板；不填则只返回通用手册。",
         required: false,
       },
     ],
     getMessages(question) {
-      const body = question && String(question).trim()
-        ? `${GUIDE_MANUAL}\n\n# 用户当前的问题\n${String(question).trim()}`
-        : GUIDE_MANUAL;
+      const body =
+        question && String(question).trim()
+          ? `${GUIDE_MANUAL}\n\n# 用户当前的问题\n${String(question).trim()}`
+          : GUIDE_MANUAL;
       return [{ role: "user", content: { type: "text", text: body } }];
     },
   },
@@ -594,7 +677,9 @@ function handleInitialize(id, params) {
     capabilities: { tools: { listChanged: false }, prompts: { listChanged: false } },
     serverInfo: SERVER_INFO,
     instructions:
-      "解题配方库（只读" + (WRITE_ENABLED ? "；写侧已开启" : "") + "）。先用 search_recipes 检索；" +
+      "解题配方库（只读" +
+      (WRITE_ENABLED ? "；写侧已开启" : "") +
+      "）。先用 search_recipes 检索；" +
       "无命中时如实告诉用户「库里没有」，不要用你自己的知识补答案——" +
       "本库的价值在于「别人真的踩过什么坑」，编造会毁掉它。引用时请带上配方 id，便于用户核对。" +
       (WRITE_ENABLED
@@ -700,7 +785,8 @@ function dispatch(msg) {
 /* ---------------- 启动 ---------------- */
 function main() {
   const pre = loadData();
-  if (pre.error) logErr("⚠️ 启动时数据源不可用，工具调用会返回 data_source_unavailable（不返回空结果）");
+  if (pre.error)
+    logErr("⚠️ 启动时数据源不可用，工具调用会返回 data_source_unavailable（不返回空结果）");
 
   const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
   rl.on("line", (line) => {
@@ -716,9 +802,11 @@ function main() {
     dispatch(msg);
   });
   rl.on("close", () => process.exit(0));
-  logErr(WRITE_ENABLED
-    ? `就绪：${TOOLS.length} 个工具（${TOOLS.map((t) => t.name).join(" / ")}）— 写入已开启（RECIPE_BOOK_WRITE=1）`
-    : `就绪：只读模式，${TOOLS.length} 个工具（${TOOLS.map((t) => t.name).join(" / ")}）`);
+  logErr(
+    WRITE_ENABLED
+      ? `就绪：${TOOLS.length} 个工具（${TOOLS.map((t) => t.name).join(" / ")}）— 写入已开启（RECIPE_BOOK_WRITE=1）`
+      : `就绪：只读模式，${TOOLS.length} 个工具（${TOOLS.map((t) => t.name).join(" / ")}）`
+  );
   if (WRITE_ENABLED) logErr("⚠️ 写工具已挂载：调用方可直接往库里落新配方，落盘即隔离，等人复核。");
 }
 

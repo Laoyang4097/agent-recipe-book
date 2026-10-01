@@ -187,7 +187,6 @@ def t2_submit_validation():
 # ---------------- 3. id 与撞车 ----------------
 def t3_id_rules():
     print("\n[3] id 规则与撞车（AC-3）")
-    before = n_files()
     try:
         ingest.submit_recipe(full_payload(title="端口被占了"))
         check("T3a 纯中文标题不得自动推导 id（AC-3.3）", False, "生成了中文 id")
@@ -294,7 +293,8 @@ def t5_promote():
     r = ingest.promote_recipe("recipe-mojibake-a", "A")
     check("T5g 人工置 verified 后可升 A（AC-6.3）", r["confidence"] == "A", str(r))
 
-    r = ingest.promote_recipe("recipe-mojibake-a", "C")
+    # A→C 现在属于降档（BL-017），必须显式确认才执行
+    r = ingest.promote_recipe("recipe-mojibake-a", "C", confirm_downgrade=True)
     fm = ingest.parse_frontmatter(text_of("recipe-mojibake-a"))
     check("T5h 驳回回隔离区（confidence=C + quarantined）",
           r["confidence"] == "C" and fm.get("status") == "quarantined", str(r))
@@ -375,6 +375,66 @@ def t7_keep_unknown_fields():
           and fm.get("confidence") == "B", f"{fm.get('status')}/{fm.get('confidence')}")
 
 
+# ---------------- 8. BL-017 降档二次确认 ----------------
+def t8_downgrade_confirm():
+    print("\n[8] 降档二次确认（BL-017）")
+    fid = "recipe-bl017-fixture"
+    fpath = os.path.join(ingest.RECIPES_DIR, fid + ".md")
+    md = (
+        "---\n"
+        "id: " + fid + "\n"
+        "title: BL-017 降档确认夹具\n"
+        "tags: [test]\n"
+        "model: test\n"
+        "problem: 用于验证降档二次确认\n"
+        "solution: 见 dead_ends\n"
+        "dead_ends:\n"
+        "  - attempt: 试过\n"
+        "    failure: 没成\n"
+        "    duration: 1 分钟\n"
+        "    early_signal: 一开始就错了\n"
+        "confidence: A\n"
+        "status: published\n"
+        "verified: true\n"
+        "---\n"
+        "正文\n"
+    )
+    with open(fpath, "w", encoding="utf-8") as f:
+        f.write(md)
+
+    # A→B 是降档：未确认应返回 confirm_required 且不执行
+    r = ingest.promote_recipe(fid, "B")
+    fm = ingest.parse_frontmatter(open(fpath, encoding="utf-8").read())
+    check("BL-017 A→B 降档未确认时返回 confirm_required", r.get("confirm_required") is True, str(r))
+    check("BL-017 A→B 未确认时不执行（仍为 A）", fm.get("confidence") == "A", str(fm.get("confidence")))
+
+    # A→B 降档确认后执行
+    r = ingest.promote_recipe(fid, "B", confirm_downgrade=True)
+    fm = ingest.parse_frontmatter(open(fpath, encoding="utf-8").read())
+    check("BL-017 A→B 确认后执行（变 B）", r.get("confidence") == "B" and fm.get("confidence") == "B", str(r))
+
+    # B→C 降档未确认：返回 confirm_required 且不执行
+    r = ingest.promote_recipe(fid, "C")
+    fm = ingest.parse_frontmatter(open(fpath, encoding="utf-8").read())
+    check("BL-017 B→C 降档未确认时返回 confirm_required", r.get("confirm_required") is True, str(r))
+    check("BL-017 B→C 未确认时不执行（仍为 B）", fm.get("confidence") == "B", str(fm.get("confidence")))
+
+    # B→C 降档确认后执行（驳回回隔离）
+    r = ingest.promote_recipe(fid, "C", confirm_downgrade=True)
+    fm = ingest.parse_frontmatter(open(fpath, encoding="utf-8").read())
+    check("BL-017 B→C 确认后执行（变 C + quarantined）",
+          r.get("confidence") == "C" and fm.get("status") == "quarantined", str(r))
+
+    # 升档 C→B 不应触发 confirm_required（确认逻辑只拦降档）
+    r = ingest.promote_recipe(fid, "B")
+    check("BL-017 C→B 升档不触发 confirm_required", "confirm_required" not in r, str(r))
+
+    try:
+        os.remove(fpath)
+    except OSError:
+        pass
+
+
 if __name__ == "__main__":
     print("=== 写侧内核回归测试 ===")
     t1_sensitive_rules()
@@ -384,9 +444,12 @@ if __name__ == "__main__":
     t5_promote()
     t6_index_sync()
     t7_keep_unknown_fields()
+    t8_downgrade_confirm()
 
-    print(f"\n通过 {len(PASS)} / 失败 {len(FAIL)}")
     if FAIL:
+        print("\n失败清单：")
         for name, detail in FAIL:
             print(f"  ❌ {name}  {detail}")
+    # 收尾口径（BL-020）：最后一行必须是这一行，tests/run-all.js 靠它汇总总计
+    print(f"\n结果：{len(PASS)} 通过 / {len(FAIL)} 失败")
     sys.exit(1 if FAIL else 0)

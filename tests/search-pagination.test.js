@@ -11,11 +11,13 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { searchRecipes } from "../lib/search.js";
 
-import { pass, failures, check, section } from "./_harness.js";
+import { check, done } from "./_harness.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const RECIPES = JSON.parse(readFileSync(join(ROOT, "api", "experiences.json"), "utf8"));
-function idsOf(res) { return res.results.map((r) => r.recipe.id); }
+function idsOf(res) {
+  return res.results.map((r) => r.recipe.id);
+}
 
 console.log("=== 检索翻页（offset / has_more / returned）===");
 
@@ -29,12 +31,24 @@ check(`查询「${Q}」命中足够多（≥6）以便翻页`, total >= 6, `matc
 const p0 = searchRecipes(RECIPES, Q, { limit: 5, offset: 0 });
 check("第1页 returned=5", p0.returned === 5, `returned=${p0.returned}`);
 check("第1页 has_more=true（后面还有）", p0.has_more === true, `has_more=${p0.has_more}`);
-check("第1页每条带 matchPct", p0.results.every((r) => typeof r.matchPct === "number"), "缺 matchPct");
+check(
+  "第1页每条带 matchPct",
+  p0.results.every((r) => typeof r.matchPct === "number"),
+  "缺 matchPct"
+);
 
 /* 第 2 页：limit=5 offset=5 —— 应与第1页不重叠、且能取到第 6 条起 */
 const p1 = searchRecipes(RECIPES, Q, { limit: 5, offset: 5 });
-check("第2页 returned 合理（min(5, 余量)）", p1.returned === Math.min(5, total - 5), `returned=${p1.returned}, total=${total}`);
-check("第2页 has_more 与剩余一致", p1.has_more === (total > 10), `has_more=${p1.has_more}, total=${total}`);
+check(
+  "第2页 returned 合理（min(5, 余量)）",
+  p1.returned === Math.min(5, total - 5),
+  `returned=${p1.returned}, total=${total}`
+);
+check(
+  "第2页 has_more 与剩余一致",
+  p1.has_more === total > 10,
+  `has_more=${p1.has_more}, total=${total}`
+);
 const overlap = idsOf(p0).filter((id) => idsOf(p1).includes(id));
 check("两页 id 不重叠（offset 真正切到后续）", overlap.length === 0, `重叠=${overlap.join(",")}`);
 
@@ -54,10 +68,10 @@ const empty0 = searchRecipes(RECIPES, "", { limit: 3, offset: 0 });
 const empty1 = searchRecipes(RECIPES, "", { limit: 3, offset: 3 });
 const eOverlap = idsOf(empty0).filter((id) => idsOf(empty1).includes(id));
 check("空查询分页不重叠", eOverlap.length === 0, `重叠=${eOverlap.join(",")}`);
-check("空查询第2页 has_more 与余量一致", empty1.has_more === (empty0.matched > 6), `has_more=${empty1.has_more}, matched=${empty0.matched}`);
+check(
+  "空查询第2页 has_more 与余量一致",
+  empty1.has_more === empty0.matched > 6,
+  `has_more=${empty1.has_more}, matched=${empty0.matched}`
+);
 
-console.log(`\n结果：${pass} 通过 / ${failures.length} 失败`);
-if (failures.length) {
-  console.log("失败项：" + failures.join("；"));
-  process.exit(1);
-}
+done();

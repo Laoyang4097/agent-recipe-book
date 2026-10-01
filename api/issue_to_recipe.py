@@ -29,7 +29,7 @@ INGEST_DIR = os.path.join(REPO_ROOT, "api")
 if INGEST_DIR not in sys.path:
     sys.path.insert(0, INGEST_DIR)
 
-import ingest
+import ingest  # noqa: E402  # 必须先插 sys.path 才能 import 同目录的 ingest，顺序不能上移
 
 # issue 表单里的节标题 -> 配方字段。顺序即优先级，重复的节取最后一次。
 SECTION_MAP = {

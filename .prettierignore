@@ -1,0 +1,28 @@
+# Prettier 的作用范围 = 可被自动化验证的源码，不是数据，不是散文，也不是标定过的前端。
+#
+# 不写这份忽略清单的后果很具体：prettier 默认把 .md / html / css 也当格式化对象，
+# 于是 `prettier --write .` 会去重排 recipes/ 下 53 条配方、llms.txt、41KB 的 PRD.md，
+# 以及 index.html（整篇重缩进 + 内联 <svg> 属性重排）。前两类是「真源数据 / 散文」，
+# 第三类是「已经过视觉标定的交付物」——三者的共同点是：改完没有任何自动化测试能证明没改坏。
+
+# 数据真源与派生物
+recipes/
+llms.txt
+api/experiences.json
+
+# 文档（散文，人工断行本身携带信息）
+*.md
+docs/
+
+# 前端站点：index.html 缩进与内联 <svg> 属性会被整体重排，assets/styles.css 约 950 行改动。
+# 这个站的外观是逐版视觉评估后定稿的（见 解题配方库_视觉评估_loop.md），而站点没有任何自动化
+# 断言能证明「重排后长得还一样」——收益为 0、风险自担。故排除，待技术冻结后单开一次
+# 「纯格式化」提交并重跑视觉评估（已登记为 BL-029）。
+index.html
+assets/
+
+# npm 自己维护 package-lock 的排版，不交给 prettier
+package-lock.json
+
+# 第三方
+node_modules/

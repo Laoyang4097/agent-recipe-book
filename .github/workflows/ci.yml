@@ -50,18 +50,62 @@ jobs:
         # 曾经这里只单跑 search-baseline + mcp-smoke 两条命令，等于门禁只覆盖 9 个测试文件里的 2 个。
         # 后果很隐蔽：别人提 PR 把写侧（submit_recipe / promote_recipe）、隔离池、引用校验、
         # 投稿解析改坏了，CI 照样绿灯 —— 「CI 门禁」这句承诺就成了空话。
-        # 现在跑 npm test（9 个文件 / 278 项断言），与本地开发完全同一套，不再有覆盖差集。
-        # 断言数口径见 说明书_素材包/02_数字基线.md：以「各测试文件自报通过数之和」为准，
-        # 不要用 grep 汇总 —— 旧账：一行 grep 曾把 273 记成 177 / 257 / 271。
+        # 现在跑 npm test（= tests/run-all.js，串起 9 个文件），与本地开发完全同一套，不再有覆盖差集。
+        #
+        # 断言数**不要**在这里写死：它会随功能增长，写死就会变成下一份过时文档。
+        # 唯一口径是 npm test 自己打的那行「总计（N 个文件）：X 通过 / Y 失败」；
+        # run-all.js 还会逐文件校验「结果：N 通过 / M 失败」这行在不在，
+        # 哪个文件口径漂了就当场标红并计入失败（BL-020：本仓库曾把同一个数报成 177/257/271/281）。
         #
         # 这几套测试各守一条线，失败时先看是哪条：
         #   search-baseline        检索质量基线（正例 6/6 ｜ 反例 3/3 ｜ 元配方不抢 Top1 ｜ 英文短词不穿透词边界）
         #   search-pagination      翻页与 limit/offset 边界
         #   search-quarantine      L3 隔离：C 级不进主检索、B 档可见、破例放行阈值
-        #   mcp-smoke              真 spawn 子进程走 stdio JSON-RPC：握手 / 工具 / 参数校验 / 只读边界 / 数据源缺失不冒充空库
+        #   mcp-smoke              真 spawn 子进程走 stdio JSON-RPC：握手 / 工具 / 参数校验 / 只读边界 / 数据源缺失不冒充空库 / 引用校验闸门
         #   agent-prompts          经验向导 prompts 自动上岗（C-1~C-6 硬约束）
-        #   write-mcp              写权限开关（RECIPE_BOOK_WRITE）+ 写侧端到端
+        #   write-mcp              写权限开关（RECIPE_BOOK_WRITE）+ 写侧端到端（已改为在临时书目录里跑，不碰真实 recipes/）
         #   verify-citations       引用校验（防编造）
-        #   ingest / ingest-write  Issue 解析、脱敏、撞 id、晋升门槛、索引幂等
+        #   ingest / ingest-write  Issue 解析、脱敏、撞 id、晋升门槛、降档二次确认、索引幂等
         run: npm test
         shell: bash
+
+  # 静态检查（BL-015）。与 validate 分成两个 job：这里红说明「代码写法有问题」，
+  # 那里红说明「行为回退了 / 派生物漂移了」，两类问题的排查思路完全不同。
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dev dependencies
+        # 用 npm ci + 已入库的 package-lock.json：devDependencies 版本在 package.json 里是**精确版**
+        # （不带 ^），因为 prettier 的格式化结果会随次版本变化——浮动版本会让「格式门禁」
+        # 在没人改代码的日子里突然变红。
+        run: npm ci
+
+      - name: ESLint（拦真 bug：未定义/未使用变量、空块、无效转义）
+        run: npm run lint:js
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: ruff check（E/F/I：真错误 + 未用导入 + import 排序）
+        # 只跑 check（有牙的那部分），不跑 ruff format --check。
+        # 原因见 pyproject.toml：本仓库还有 4 个文件没格式化，把它当门禁会在冻结前
+        # 制造一次 700+ 行的纯风格 diff。已登记为 BL-029，冻结后单独开一次格式化提交。
+        run: |
+          pip install "ruff==0.16.9"
+          npm run lint:py
+
+      - name: Prettier 格式检查（非阻塞 · 只提醒）
+        # 同上：先用 continue-on-error 把漂移**显示出来**，但不挡 PR。
+        # 等 BL-029 落地后，这一行摘掉 continue-on-error 即可升级为真门禁。
+        continue-on-error: true
+        run: npx prettier --check .

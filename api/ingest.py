@@ -16,19 +16,26 @@ agent-recipe-book · 写入 API 最小实现 + 静态生成器 (MVP)
       ingest 渲染 .md 本身不依赖 pyyaml（手写 frontmatter 字符串）。
 """
 
-import sys
+import datetime
+import hashlib
+import json
 import os
 import re
-import json
-import hashlib
-import datetime
+import sys
 
 try:
     import yaml
 except ImportError:
     yaml = None
 
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_DEFAULT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# 落盘根目录可被 RECIPE_BOOK_ROOT 整体重定向（BL-016）。
+# 动机：写侧测试原先直接写真实 recipes/，只靠跑完删文件兜底——一旦中途崩，
+# 主库就留下孤儿文件。现在测试把「整本书」复制进临时目录再把根指过去，
+# 真仓库在物理上就不可能被碰到，不依赖任何收尾清理。
+# 下方三个派生路径一律由根推出，保持单一真值源（不许各自再读一遍环境变量）。
+REPO_ROOT = os.environ.get("RECIPE_BOOK_ROOT") or _DEFAULT_ROOT
 RECIPES_DIR = os.path.join(REPO_ROOT, "recipes")
 LLMS_TXT = os.path.join(REPO_ROOT, "llms.txt")
 EXP_JSON = os.path.join(REPO_ROOT, "api", "experiences.json")
@@ -387,7 +394,7 @@ def submit_recipe(payload: dict) -> dict:
         record["contributor_id"] = make_contributor_id(handle)
     record.pop("contributor", None)
 
-    path = _write_recipe(rid, record)
+    _write_recipe(rid, record)   # 返回值只有一个「相对路径」字符串，调用方用 rid 自己拼，不需要接
     sync_experiences()
     return {
         "id": rid,
@@ -487,17 +494,42 @@ def rewrite_frontmatter(text: str, fm: dict) -> str:
     return "---\n" + header + "---" + rest
 
 
-def promote_recipe(rid: str, level: str) -> dict:
+# 置信度分级高低：A 最高（有实测证据），C 最低（隔离/驳回）。用于降档判定。
+_CONF_RANK = {"A": 3, "B": 2, "C": 1}
+
+def promote_recipe(rid: str, level: str, confirm_downgrade: bool = False) -> dict:
     level = str(level or "").strip().upper()
     cur = read_recipe(rid)
     fm = cur["fm"]
     cur_conf = str(fm.get("confidence") or "A").upper()
+
+    # 目标分级非法：尽早报错，避免下方按分级判断时 KeyError
+    if level not in _CONF_RANK:
+        raise WriteError([{"field": "confidence",
+                           "reason": f"confidence 只能是 A / B / C 之一（收到：{level}）。"}])
 
     # 禁跳级：C 想直接升 A 必须先在 B 停一次，否则分级就失去意义
     if level == "A" and cur_conf == "C":
         raise WriteError([{"field": "confidence",
                            "reason": "禁止跳级：C 不能直接升 A。先调 promote_recipe(id, confidence=\"B\") "
                                      "在 B 停一次，过了 B 的门槛再升 A"}])
+
+    # BL-017 降档二次确认：目标分级低于当前（A→B / A→C / B→C）需显式确认，防手滑。
+    # 驳回回隔离区（→C）亦属降档，必须经人确认，否则一条公开配方会被静默打回。
+    is_downgrade = _CONF_RANK[level] < _CONF_RANK[cur_conf]
+    if is_downgrade and not confirm_downgrade:
+        return {
+            "id": rid,
+            "confirm_required": True,
+            "current_confidence": cur_conf,
+            "target_confidence": level,
+            "next_human_action":
+                ("这是降档操作（" + cur_conf + " → " + level + "），"
+                 + ("会把该配方打回隔离池、从公开索引消失" if level == "C"
+                    else "公开置信度会下调为 " + level)
+                 + "。确认无误请在调用时加 confirm_downgrade: true。"),
+        }
+
     errs = promotion_errors(fm, level)
     if errs:
         raise WriteError(errs)  # 失败时不碰原稿，AC-6.6
@@ -652,8 +684,9 @@ if __name__ == "__main__":
                     {"field": "json", "reason": f"JSON 解析失败：{e}"}]}, ensure_ascii=False))
                 sys.exit(2)
             _emit(submit_recipe(payload))
-        elif cmd == "promote" and len(sys.argv) == 4:
-            _emit(promote_recipe(sys.argv[2], sys.argv[3]))
+        elif cmd == "promote" and len(sys.argv) in (4, 5):
+            confirm = "--confirm-downgrade" in sys.argv[4:]
+            _emit(promote_recipe(sys.argv[2], sys.argv[3], confirm_downgrade=confirm))
         else:
             print("未知命令。" + USAGE)
             sys.exit(1)
