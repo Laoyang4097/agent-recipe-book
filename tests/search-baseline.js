@@ -289,9 +289,21 @@ check(
   "listTags 按出现次数降序",
   tags.every((t, i) => i === 0 || tags[i - 1].count >= t.count)
 );
+// listTags 默认只统计已发布配方，隔离池不该进公开标签清单。
+// 期望值必须跟着「同一个总体」算 —— 之前拿全库去比，库里一旦有隔离态投稿这条就假红。
+const published = RECIPES.filter((r) => r.status === "published");
+const tagSum = (rs) => rs.reduce((s, r) => s + (r.tags || []).length, 0);
+const tagCounted = tags.reduce((s, t) => s + t.count, 0);
 check(
-  "listTags 计数之和 = 全部 tag 引用数",
-  tags.reduce((s, t) => s + t.count, 0) === RECIPES.reduce((s, r) => s + (r.tags || []).length, 0)
+  "listTags 计数之和 = 已发布配方的 tag 引用数",
+  tagCounted === tagSum(published),
+  `${tagCounted} vs ${tagSum(published)}`
+);
+const tagsAll = listTags(RECIPES, { includeUnpublished: true });
+check(
+  "includeUnpublished 打开后 = 全库 tag 引用数（隔离池被计入）",
+  tagsAll.reduce((s, t) => s + t.count, 0) === tagSum(RECIPES),
+  `${tagsAll.reduce((s, t) => s + t.count, 0)} vs ${tagSum(RECIPES)}`
 );
 
 const groupCounts = GROUPS.filter((g) => g.key !== "all").map((g) => ({

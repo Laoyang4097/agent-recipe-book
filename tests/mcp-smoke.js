@@ -372,7 +372,31 @@ try {
     typeof lqp.total === "number" && Array.isArray(lqp.items),
     JSON.stringify(Object.keys(lqp))
   );
-  check("真实库 list_quarantine total=0（无 C 级）", lqp.total === 0, `=${lqp.total}`);
+  // 隔离池允许非空（投稿的正常落点）。这里守的是「清单自洽」+「隔离态默认不进主检索」，
+  // 而不是"池子必须是空的" —— 后者会让"今天投了一条配方"这种正常动作把 CI 打红。
+  check(
+    "list_quarantine 清单自洽（total = items.length）",
+    lqp.total === lqp.items.length,
+    `total=${lqp.total} items=${lqp.items.length}`
+  );
+  check(
+    "list_quarantine 每项都带 id/title",
+    lqp.items.every((x) => typeof x.id === "string" && x.id && typeof x.title === "string"),
+    JSON.stringify(lqp.items.slice(0, 2))
+  );
+  const qIds = lqp.items.map((x) => x.id);
+  if (qIds.length) {
+    const dq = await s.call("tools/call", {
+      name: "search_recipes",
+      arguments: { query: "抓取 报错 坑" },
+    });
+    const dqIds = (JSON.parse(dq.result.content[0].text).results || []).map((r) => r.id);
+    check(
+      "隔离态条目不出现在默认检索结果里",
+      qIds.every((id) => !dqIds.includes(id)),
+      `池=${qIds.join(",")} 默认结果=${dqIds.slice(0, 6).join(",")}`
+    );
+  }
   const tl = await s.call("tools/list", {});
   const tlNames = (tl.result?.tools || []).map((t) => t.name);
   check("tools/list 含 list_quarantine", tlNames.includes("list_quarantine"), tlNames.join(","));

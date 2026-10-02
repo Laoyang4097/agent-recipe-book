@@ -312,11 +312,20 @@ check(
    条数只设下限——写死具体数字会让"又加了 2 条配方"这种正常动作变红。 */
 // 原断言写「全部 confidence='A'」：那是晋升功能还没存在时的前提。B 档是晋升机制的
 // 合法产物，主库里出现 B 不该变红；真正要守的是隔离态不许漏进主库。
-const leaked = RECIPES.filter((r) => r.confidence === "C" || r.status === "quarantined");
+/* 隔离池允许非空 —— 那是治理流程的正常状态：投稿先落 C 级隔离池，人工 promote 后才公开。
+   所以这里不能断言「池子必须是空的」（那会把"今天刚投了一条"变成红灯），
+   真正要守的是行为：池里的 id 一条都不许出现在主检索结果里。 */
+const quarantinedIds = new Set(
+  RECIPES.filter((r) => r.confidence === "C" || r.status === "quarantined").map((r) => r.id)
+);
+const probes = ["爬虫被封 IP 了", "中文乱码", "翻页重复数据", "限流 429", "登录 cookie 丢失", "编码 gbk"];
+const leaks = probes.flatMap((q) =>
+  idsOf(searchRecipes(RECIPES, q, {})).filter((id) => quarantinedIds.has(id))
+);
 check(
-  "真实配方无一处于隔离态（C / quarantined）",
-  leaked.length === 0,
-  leaked.map((r) => r.id).join(",")
+  `隔离态条目一条都不许漏进主检索（${probes.length} 条探针查询，池内 ${quarantinedIds.size} 条）`,
+  leaks.length === 0,
+  leaks.join(",")
 );
 check(
   "真实库已出现 B 档（晋升链路真的用过，A/B 权重差异有真数据可验）",

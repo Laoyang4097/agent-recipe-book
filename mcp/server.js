@@ -258,6 +258,9 @@ function toolSearchRecipes(args) {
       solution: recipe.solution,
       result: recipe.result,
       retrospective: recipe.retrospective,
+      // 2026-10-01 边界字段：声明配方的适用/不适用边界（防错配锚定，见 v21 实验）
+      applies_when: recipe.applies_when || "",
+      not_applies_when: recipe.not_applies_when || "",
     })),
   };
   // BL-014：verify:true 时附带「可引用白名单」，调用方据此用 verify_citations 复核引用
