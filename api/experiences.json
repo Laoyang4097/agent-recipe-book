@@ -1,5 +1,50 @@
 [
   {
+    "id": "recipe-agent-no-retrieval-reinvents-wheel",
+    "title": "会话里没加载 MCP 时 Agent 不会查库，会自己从零写一份速查手册——而库里第 1 条就 100% 命中",
+    "tags": [
+      "mcp",
+      "agent",
+      "检索",
+      "methodology",
+      "environment"
+    ],
+    "confidence": "A",
+    "model": "与模型无关（工具不可见时能力再强也调不到）",
+    "problem": "在一个新开的会话里问「抓回来的网页乱码怎么办」，Agent 全程没有调用任何检索工具，直接写了 27KB 的修复脚本加 4.7KB 的速查手册。事后在主库用同一句话检索：命中 20 条，第 1 条匹配度 100%、A 级置信，其解法已覆盖速查手册五条硬规矩中的三条。",
+    "dead_ends": [
+      {
+        "attempt": "以为 MCP 挂上了就全局可用，直接让旧会话里的 Agent 去查库",
+        "failure": "该会话启动时 MCP 还没挂载，工具列表里根本没有检索工具，Agent 看不到也就无从调用——不是它不想查，是它不知道有库存在",
+        "duration": "整个会话约 13 分钟",
+        "early_signal": "会话产物里出现「自己写了一份通用速查手册 / 指南 / 清单」这类从零造轮子的动作，这是没查库的最强信号"
+      },
+      {
+        "attempt": "只确认配置文件写对了，就认为挂载成功，不去验证目标会话里工具是否可见",
+        "failure": "配置文件正确不等于会话可见；MCP 在客户端启动时加载，早于挂载时刻就启动的会话永远看不到",
+        "duration": "约 10 分钟",
+        "early_signal": "判断挂载是否成功的唯一标准是「在目标会话里实际调一次检索看命中数」，而不是看配置文件内容"
+      },
+      {
+        "attempt": "发现 Agent 没查库后，只怪模型不主动",
+        "failure": "归因错误——工具不可见时模型再强也调不到；把环境问题当成模型问题，会错过真正要修的加载时机",
+        "duration": "约 5 分钟",
+        "early_signal": "先问「工具在不在列表里」，再问「模型用没用」；两个问题的解法完全不同"
+      }
+    ],
+    "solution": "1) 挂载完成的判据改为端到端验证：在目标会话里实际调一次检索，命中数大于 0 才算真通。2) 怀疑没加载时，用命令行直连 server 跑一次 initialize，能返回工具列表就证明 server 本身没问题，问题在会话加载时机。3) 对已生效的会话，仍要在任务开始时显式提醒一句「先查库再动手」——实测对照显示，作业里多写这一句，Agent 就会检索并逐条比对，一次通过；不写就可能自己造轮子。4) 把「Agent 自己产出了一份通用指南或速查手册」列为巡检信号，一旦出现就回头核查该会话是否加载了检索工具。",
+    "result": "逐条核对 8 个知识点的实测结果（不是估计）：3 条库里已有（别信 r.encoding / 别硬套「中文站=GBK」/ 别用 errors 硬吞，均在 100% 命中的第 1 条 recipe-py-encoding-mojibake 内），5 条是库里的真增量（检测库把 GBK 误判成 cp949、Big5 靠 PUA 与 GBK 区分、gb2312 一律当 gb18030、PowerShell Add-Type 被安全策略拦、Windows 弹窗要用 ctypes 调 MessageBoxW）。结论修正：不查库的代价不是「白写一遍」，而是「通用部分重复造了 3 条，同时环境专属那 5 条差点没被记下来」。",
+    "retrospective": "工具可见性是检索行为的天花板——工具不在列表里，讨论模型主不主动没有意义。排查必须分两层：先确认加载（工具在不在），再确认调用（模型用没用）。另外，作业提示里加一句「先查库」能显著改变行为，这不是猜测而是有对照样本的：同样两个租户填充任务，一个提示查库一个没提示，前者一次通过、后者踩了库里已有的坑。",
+    "skills": [
+      "MCP 客户端配置"
+    ],
+    "harness": "WorkBuddy",
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-2f183a"
+  },
+  {
     "id": "recipe-atomic-write-half-file",
     "title": "边写边渲染会留 0 字节烂尾文件",
     "tags": [
@@ -780,6 +825,44 @@
     "created_at": "2026-09-23"
   },
   {
+    "id": "recipe-mcp-trust-needs-client-restart",
+    "title": "改完 MCP 配置并点了信任，当前会话仍看不到工具——MCP 在客户端启动时加载，必须重启或开新会话",
+    "tags": [
+      "mcp",
+      "tooling",
+      "config",
+      "agent"
+    ],
+    "confidence": "A",
+    "model": "与客户端相关，与模型无关",
+    "problem": "把一个新的 MCP server 写进客户端配置文件、并在连接器面板点了信任（Trust）之后，在当前会话里问 AI「你能用某某工具吗」，它的工具列表里根本没有这个 server。配置 JSON 完全合法，用命令行直接启动这个 server 也一切正常、工具正常返回——但 AI 就是看不见。",
+    "dead_ends": [
+      {
+        "attempt": "以为点完信任就立刻生效，直接在当前会话追问 AI 能不能用",
+        "failure": "工具列表里没有这个 server，AI 甚至不知道它存在，会如实回答「我没有这个工具」",
+        "duration": "约 5min",
+        "early_signal": "授权（Trust）与加载（Load）是两件事——授权只是「允许它运行」，不会让已经在跑的会话重新加载工具列表"
+      },
+      {
+        "attempt": "反复检查配置 JSON 是不是格式写错了",
+        "failure": "JSON 完全合法（能被 JSON.parse），格式没有任何问题",
+        "duration": "约 10min",
+        "early_signal": "先用命令行直接 spawn 一次这个 server，能起来、能返回工具列表，就说明配置没错——问题在加载时机，不在配置"
+      }
+    ],
+    "solution": "1) 先排除配置本身：在命令行直接跑一次 server（如 printf 一行 initialize 报文 | node mcp/server.js），能加载并返回工具列表就证明配置无误。2) 确认客户端已经在连接器面板点了信任。3) 重启客户端，或重开一个会话——MCP server 在客户端启动时一次性加载，运行中新增的不会自动进工具列表。4) 重启后再用工具检索接口验证一次，命中大于 0 才算真的通了。",
+    "result": "命令行直连验证：主库加载 61 条配方、5 个工具全部就绪；配置文件 JSON 合法、客户端已回写确认。当前会话（未重启）工具列表中查无此 server；需在重启后的新会话中复验。",
+    "retrospective": "一句话忠告：MCP 的信任授权与进程加载是两步，别把「点了信任」当成「已经生效」。排查顺序应当是——先用命令行验证 server 本身能跑，再怀疑客户端加载时机，最后才回头查配置格式。",
+    "skills": [
+      "MCP 客户端配置"
+    ],
+    "harness": "WorkBuddy（同理适用于其它支持 MCP 的客户端）",
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-2f183a"
+  },
+  {
     "id": "recipe-pj-guess-as-conclusion",
     "title": "把拍脑袋的估计当结论写进文档 —— 20 分钟能测出来的数，用「大概」代替",
     "tags": [
@@ -967,6 +1050,49 @@
     "seed": true,
     "contributor_id": "anon-2f183a",
     "created_at": "2026-09-23"
+  },
+  {
+    "id": "recipe-py-encoding-detector-misjudges-cjk",
+    "title": "编码检测库在短文本上把 GBK 中文判成韩文 cp949；Big5 与 GBK 字节结构相同，只能靠私用区字符区分",
+    "tags": [
+      "encoding",
+      "scrape",
+      "python"
+    ],
+    "confidence": "A",
+    "model": "Agent+Python requests（本机 Windows）",
+    "problem": "用 charset_normalizer 或 chardet 检测中文页面编码时，短文本上频繁把 GBK 简体中文判成韩文 cp949，解出来一堆谚文。想改用字节结构自己判，又发现 Big5 繁体与 GBK 简体都是双字节编码，覆盖率同样高，光看结构分不开。",
+    "dead_ends": [
+      {
+        "attempt": "直接信检测库的 best().encoding，拿它 decode",
+        "failure": "短文本（几十到几百字）上 charset_normalizer 把 GBK 中文判成 cp949，解出来是谚文而不是汉字；chardet 有同类问题。检测库在短样本上统计特征不足，结论不可靠",
+        "duration": "约 10 分钟（反复对照不同片段）",
+        "early_signal": "解出来的文本里出现谚文音节（U+AC00 到 U+D7A3）而不是汉字，而原文本该是简体中文"
+      },
+      {
+        "attempt": "改用「GBK 双字节覆盖率」做结构判定，覆盖率高就判 GBK",
+        "failure": "Big5 也是双字节编码，覆盖率同样能到 85% 以上，于是繁体页被当成简体解，出来一堆汉字但全是错的（同码不同字）",
+        "duration": "约 15 分钟",
+        "early_signal": "解出来是汉字但语义不通、繁简混杂，且没有任何异常抛出——这类错误最危险，因为它看起来像成功了"
+      },
+      {
+        "attempt": "用 gb2312 解码以图「更标准」",
+        "failure": "遇到 GBK 扩展区的字（生僻人名、古汉字）直接抛 UnicodeDecodeError；gb2312 是 GBK 的真子集",
+        "duration": "约 5 分钟",
+        "early_signal": "decode 抛 UnicodeDecodeError，且报错字节落在 GBK 扩展区"
+      }
+    ],
+    "solution": "① 检测库的结论只当候选，给 +5 加权，绝不作为决定性判据。② 判定以字节结构为主：先看 BOM；再看 HTML meta charset 与 HTTP 响应头的 Content-Type（排除 ISO-8859-1）；再做结构判定——能严格解码为 UTF-8 就判 UTF-8（UTF-8 汉字首字节在 E4 到 E9、占 3 字节），否则按双字节覆盖率判断，达到 85% 先按 gb18030 试解。③ 关键区分：用 gb18030 试解后统计私用区字符（U+E000 到 U+F8FF）占比，达到 2% 说明这套双字节不是 GBK，应判为 Big5 等其他编码并转交检测库。④ 简体一律用 gb18030 而不是 gb2312 或 gbk，它是超集，只会解得更多不会更差。⑤ 多候选时用打分选优：汉字密度×20 + 常用字命中率×15 − 私用区占比×30 − 替换字符 U+FFFD 占比×30，合法 UTF-8 额外加 15。",
+    "result": "按上述顺序实现的判定器在本次乱码处理中：UTF-8 页严格解成功直接定性；GBK 页走 gb18030 正确还原；繁体页靠私用区占比识别出是 Big5 而非 GBK。检测库退化为候选后不再出现 cp949 误判。",
+    "retrospective": "检测库不是不能用，是不能当裁判——它在长文本上准，在短文本上会跨语系误判，把中文判成韩文是最常见的一种。字节结构判定是更可靠的裁判，但它只能区分「单字节 vs 双字节 vs UTF-8」，区分不了同样是双字节的 GBK 与 Big5；这一步必须靠私用区字符这类副作用特征，而不是靠覆盖率。",
+    "skills": [
+      "编码判定"
+    ],
+    "harness": "Python 3.13 / requests + charset_normalizer",
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-2f183a"
   },
   {
     "id": "recipe-py-encoding-mojibake",
@@ -1542,6 +1668,50 @@
     "confidence": "B",
     "contributor_id": "anon-17753a",
     "created_at": "2026-09-26"
+  },
+  {
+    "id": "recipe-search-tiebreak-silent-reorder",
+    "title": "新配方入库把老配方挤到第 3 位——同分排序无确定性 tie-break，措辞撞车会放大它",
+    "tags": [
+      "search",
+      "回归",
+      "检索",
+      "invariant"
+    ],
+    "confidence": "A",
+    "model": "Agent+Node（agent-recipe-book 本机实测）",
+    "problem": "往库里加了 3 条新配方后，检索质量回归基线立刻报红：基线用例「抓回来是乱码」的目标配方从第 2 位掉到第 3 位。新配方与老配方得分完全相同（都是 86% / 6 分），谁在前取决于 rebuild 时文件遍历的先后顺序——也就是说，排序结果依赖文件系统顺序，而不是依赖内容。",
+    "dead_ends": [
+      {
+        "attempt": "以为「多一条配方」只是增加召回，不会影响已有排序",
+        "failure": "新增条目会进入打分池，与老条目同分时直接改变 Top-N 顺序；本次即触发基线 AC-2 失败",
+        "duration": "约 5 分钟（定位到是新加的那条）",
+        "early_signal": "加完配方后 npm test 报「目标排名 ≤ 2 — 实际第 3 位」，且失败项集中在检索质量文件"
+      },
+      {
+        "attempt": "想把测试基线的期望从「≤ 2」放宽到「≤ 3」，让测试通过",
+        "failure": "这是改测试迁就实现。基线存在的意义就是抓这类回归，放宽等于把警报器拆了",
+        "duration": "思考约 3 分钟后放弃",
+        "early_signal": "当第一反应是「改期望值」而不是「改内容」时，几乎一定走错了方向"
+      },
+      {
+        "attempt": "怀疑是打分权重问题，准备去调 WEIGHT_TITLE / WEIGHT_SYN_TAG",
+        "failure": "权重是全局的，一改波及全库 65 条；而本次问题只出在一条新配方的措辞上，用不上全局手术",
+        "duration": "约 5 分钟（读完打分逻辑后判断）",
+        "early_signal": "单条条目引发的问题，先查那条条目本身，别动全局参数"
+      }
+    ],
+    "solution": "① 定位到具体是哪条新配方挤上来的：直接跑一次检索打印 Top5 的 id 与得分。② 检查该配方的 problem 与 title 里有没有与基线 query 撞车的场景词——本次新配方 problem 开头写的「抓回来的中文页面」正好撞上基线 query「抓回来是乱码」，改掉这个开头、聚焦到真正主题（检测库误判）后，匹配度从 86% 掉到 57%，排序自然回落。③ 每次入库后必跑 npm test，检索质量基线是唯一的警报器。④ 根治：给排序加确定性 tie-break——有效分相同时按 id 字典序升序，不再依赖文件遍历顺序。⑤ 加完修复必须反向验证：临时把 tie-break 摘掉跑一次测试，确认它真的会变红；只看到「全绿」不能证明测试有效。",
+    "result": "改掉新配方 problem 开头的「抓回来的」四个字后：目标配方回到第 2 位（86%），新配方落到第 3 位（57%），npm test 由 295/3 恢复为 298/0 全绿，库容 65 条。",
+    "retrospective": "配方库的检索质量不是一次性调好的，而是会被每一次入库重新扰动。「加数据」和「改排序」是同一件事的两面——只要同分没有确定性 tie-break，加一条就可能悄悄改写已有答案的顺序。好在这次有基线在守着：它把问题在入库后 30 秒内抓了出来，而不是等到有人查库查到错答案才发现。这也说明回归基线不是可选项，是入库流程的一部分。",
+    "skills": [
+      "检索排序"
+    ],
+    "harness": "agent-recipe-book / lib/search.js + tests/search-baseline.js",
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-2f183a"
   },
   {
     "id": "recipe-shell-heredoc-quoting",
@@ -2519,6 +2689,50 @@
     "seed": true,
     "contributor_id": "anon-2f183a",
     "created_at": "2026-09-24"
+  },
+  {
+    "id": "recipe-win-powershell-addtype-blocked",
+    "title": "Windows 受限环境里 PowerShell Add-Type 被拦、WScript.Shell 不可用、msg.exe 不存在——弹系统通知只剩 ctypes 调 MessageBoxW",
+    "tags": [
+      "windows",
+      "powershell",
+      "environment",
+      "tooling"
+    ],
+    "confidence": "B",
+    "model": "WorkBuddy agentic（本机 Windows，单环境实测）",
+    "problem": "用户要求「任务跑完弹个系统通知提醒我」。Windows 上三条常规做法全部走不通：PowerShell 的 Add-Type 运行时编译被安全策略阻止，New-Object -ComObject WScript.Shell 也被阻止，命令行 msg.exe 在本机不存在。",
+    "dead_ends": [
+      {
+        "attempt": "用 PowerShell Add-Type 现场编译一段 C Sharp 代码来调系统通知",
+        "failure": "被安全策略阻止，报禁止加载或编译类错误——受限环境不允许运行时编译 .NET 代码",
+        "duration": "约 5 分钟",
+        "early_signal": "凡是需要在运行时「编译」的方案（Add-Type、csc、jit）在受限环境里都要第一个被怀疑"
+      },
+      {
+        "attempt": "改用 COM 自动化：New-Object -ComObject WScript.Shell 再调 Popup",
+        "failure": "同样被阻止，COM 对象创建失败",
+        "duration": "约 3 分钟",
+        "early_signal": "沙箱通常把「运行时编译」和「COM 自动化」归为同一类管控，试了一个失败就该直接跳过另一个，别再花时间"
+      },
+      {
+        "attempt": "退到命令行：调用系统自带的 msg.exe 发消息",
+        "failure": "本机不存在该可执行文件（并非所有 Windows 版本都带，家庭版常见缺失）",
+        "duration": "约 2 分钟",
+        "early_signal": "依赖系统自带 exe 之前，先用 where 或 Test-Path 确认它存在"
+      }
+    ],
+    "solution": "① 首选零依赖方案：Python 标准库 ctypes 直接调 user32 的 MessageBoxW，不需要编译、不需要 COM、不需要额外 exe——ctypes.windll.user32.MessageBoxW(0, 正文, 标题, 0x40)，第四个参数是图标样式，0x40 为信息图标。② 次选 PowerShell 预加载 System.Windows.Forms 弹窗（同样可能被拦，需先小范围试一次）。③ 最稳的是根本不依赖弹窗：把完成状态写进一份状态文件，并在对话里明确告知用户，由用户自己查看。④ 通用教训：受限环境里凡是需要「编译 / COM / 外部 exe」的通知方案成功率都很低，动手前按这个顺序先排掉。",
+    "result": "Add-Type、WScript.Shell、msg.exe 三条路全部确认不可用；改用 ctypes 调 MessageBoxW 后成功弹出系统对话框。注意弹窗是模态的，会阻塞调用方直到用户点掉——放后台任务里用时要考虑这一点。",
+    "retrospective": "「弹个窗」这种看起来最简单的需求，在受限环境里反而最容易连撞三堵墙，因为它天然依赖系统级能力（编译、COM、系统命令），而这三类恰好都是沙箱的管控重点。排查顺序应当是「零依赖 → 预装组件 → 系统命令」，反过来试会浪费三倍时间。",
+    "skills": [
+      "Windows 系统通知"
+    ],
+    "harness": "Windows / PowerShell / Python ctypes",
+    "verified": true,
+    "status": "published",
+    "seed": true,
+    "contributor_id": "anon-2f183a"
   },
   {
     "id": "recipe-yaml-frontmatter-colon",

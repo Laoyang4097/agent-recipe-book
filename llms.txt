@@ -2,6 +2,7 @@
 > 人类解题经验的机器可读共享库。每条配方含 模型/skill/harness/硬件 与结构化死胡同。
 
 ## 索引
+- recipes/recipe-agent-no-retrieval-reinvents-wheel.md: 会话里没加载 MCP 时 Agent 不会查库，会自己从零写一份速查手册——而库里第 1 条就 100% 命中 — 1) 挂载完成的判据改为端到端验证：在目标会话里实际调一次检索，命中数大于 0 
 - recipes/recipe-atomic-write-half-file.md: 边写边渲染会留 0 字节烂尾文件 — 先把正文算成完整字符串 text = render_md(record)，再 o
 - recipes/recipe-error-class-split.md: 静默归一等于替调用方改主键，错误分类错了等于让 Agent 白改参数 — ① 含大写字符直接拒，报错点名「库内 id 形如 recipe-sqlite-w
 - recipes/recipe-eval-artifact-dir-batch-tag.md: 运行产物目录不带批次标识：第二次跑会静默覆盖第一次的样本代码，事后无法复核 — ① 一切「证据类」产物都按批次标识分目录：`runs<tag>/`，与结果文件同
@@ -19,11 +20,13 @@
 - recipes/recipe-infra-verify-silent-pass.md: 三处"验证通过"其实是没验证到：端口残留 / 日志过滤 / 兜底分类 — ① 服务/探针类脚本：启动前确认端口真的空闲，日志落文件而不是写 /dev/nu
 - recipes/recipe-interpreter-pick-not-install.md: 不是缺依赖是挑错了解释器：默认配置下开闸必然失败，而测试全绿 — ① 按能力筛不按名字猜：候选逐个试 `python -c "import yam
 - recipes/recipe-managed-python-env-pitfalls.md: 在 WorkBuddy 托管 Python 环境跑依赖脚本的坑（缺包 / 丢 git 身份 / cwd 不持久 / YAML 日期序列化） — ① 建隔离 venv 装依赖：`python -m venv .../envs/
+- recipes/recipe-mcp-trust-needs-client-restart.md: 改完 MCP 配置并点了信任，当前会话仍看不到工具——MCP 在客户端启动时加载，必须重启或开新会话 — 1) 先排除配置本身：在命令行直接跑一次 server（如 printf 一行 
 - recipes/recipe-pj-guess-as-conclusion.md: 把拍脑袋的估计当结论写进文档 —— 20 分钟能测出来的数，用「大概」代替 — 把「性能 / 容量」类断言统一改成「实测 + 拐点」写法：写一个 20 行的基准
 - recipes/recipe-pj-requirement-misremembered.md: 把主办方要求记错，按「常识」排期 —— 差点白耗 2-3 天做错重点 — 把主办方原文拆成三栏清单：初赛必交 / 初赛可选 / 决赛必交，每条标注原文出处
 - recipes/recipe-pj-rule-from-memory.md: 引用「规则」时凭记忆作答，没打开原文核对 —— 结论当场被问倒 — ① 引用任何规则/字段/参数前，先打开原文逐项核对，不要用记忆代替；② 给结论时
 - recipes/recipe-py-antibot-stop-on-hit.md: 反爬遇即停：requests 默认 UA 撞 403+JS/DataDome 挑战与 Cloudflare 403，命中即弃、零绕过 — 可复用步骤：① 抓取任何站点第一条请求就用 try/except 包住，并显式 
 - recipes/recipe-py-content-encoding-double-decode.md: Content-Encoding 静默解压：requests 已自动解 gzip/deflate，手动再解一次即崩；br 未装库则静默乱码 — 可跑要点：① 默认别手动解压——requests 会自动处理 gzip/defl
+- recipes/recipe-py-encoding-detector-misjudges-cjk.md: 编码检测库在短文本上把 GBK 中文判成韩文 cp949；Big5 与 GBK 字节结构相同，只能靠私用区字符区分 — ① 检测库的结论只当候选，给 +5 加权，绝不作为决定性判据。② 判定以字节结构
 - recipes/recipe-py-encoding-mojibake.md: requests 抓中文站默认 r.encoding=ISO-8859-1 致乱码，用 apparent_encoding/content.decode 修复 — 别信 r.encoding。可跑要点：① 先看响应头是否带 charset；无 
 - recipes/recipe-py-highlevel-tool-fake-pitfall.md: 用高层抓取工具产出的坑多半是假的：11 条配方被整批拒收 — 弃用高层工具产配方。改用真实 Python requests 脚本逐条重跑采集任
 - recipes/recipe-py-html-entities-not-decoded.md: 提取文本忘 unescape：&#39;/&amp;/&rarr; 原样入库，手写 replace 链还会因顺序二次解码 — 可跑要点：① 取到文本后统一用标准库 html.unescape(text) 解
@@ -38,6 +41,7 @@
 - recipes/recipe-ratelimit-threshold-not-relative.md: 配方里的绝对阈值会被跨站照抄：`remaining<10 就停` 搬到 Limit=5 的站点上，等于抓一条就收手 — ① 配方里的阈值一律相对化：`remaining <= max(1, ceil(
 - recipes/recipe-redact-rules-true-corpus-first.md: 脱敏规则落地前先拿真库跑一遍：一个文档保留段就废了整条规则 — 收紧的是「识别方式」不是「判断标准」：把裸关键词列表改成认凭据形态——键值赋值（
 - recipes/recipe-render-order-drift.md: 新字段漏进渲染清单等于没落盘：confidence 不在 RENDER_ORDER 里，隔离态被主检索直接返回 — 把 confidence 补进 RENDER_ORDER。这个清单是渲染字段的唯
+- recipes/recipe-search-tiebreak-silent-reorder.md: 新配方入库把老配方挤到第 3 位——同分排序无确定性 tie-break，措辞撞车会放大它 — ① 定位到具体是哪条新配方挤上来的：直接跑一次检索打印 Top5 的 id 与得
 - recipes/recipe-shell-heredoc-quoting.md: bash heredoc 里的嵌套引号会把脚本绞碎 — 不再把长脚本塞进 heredoc。改为把脚本写入临时文件（用写文件工具而非 ec
 - recipes/recipe-test-asserts-pristine-not-invariant.md: 测试断言把「库当前是干净的」当成不变量：正常的治理动作一发生，CI 必红 — 把状态断言改成不变量断言（问「无论数据怎么变，什么必须永远成立」）：① 「隔离态
 - recipes/recipe-tmp-gitbash-vs-windows-python.md: Git Bash 的 /tmp 和 Windows Python 眼里的 /tmp 不是同一个目录 — 改用两边都认的临时目录绝对路径，测试里统一用它，不再写 /tmp。
@@ -62,6 +66,7 @@
 - recipes/recipe-web-third-party-font-blocks-fcp.md: 静态站上一个 Google Fonts 引用吃掉 33% 首屏时间：删掉后 FCP 512ms → 344ms — ① 把 index.html 里 2 个通往 fonts.googleapis.
 - recipes/recipe-web-thumbnail-misjudge.md: 缩略图看走眼：同一现象连续误判三次「移动端文字被裁」 — 用注入式探针取客观数据代替肉眼：document.documentElement
 - recipes/recipe-web-wcag-muted-contrast.md: 次级灰字对比度只有 3.06:1：看着「还行」实则不达 WCAG AA — 按 WCAG 相对亮度公式逐个色值计算对比度，把不达标的次级色调深：--mute
+- recipes/recipe-win-powershell-addtype-blocked.md: Windows 受限环境里 PowerShell Add-Type 被拦、WScript.Shell 不可用、msg.exe 不存在——弹系统通知只剩 ctypes 调 MessageBoxW — ① 首选零依赖方案：Python 标准库 ctypes 直接调 user32 的
 - recipes/recipe-yaml-frontmatter-colon.md: 手写 YAML frontmatter 时 failure 含冒号被当键值分隔符，渲染/回读直接崩——改用 yaml.safe_dump — ① frontmatter 永远用 yaml.safe_dump(dict) 生
 
 ## 如何被 Agent 读取
