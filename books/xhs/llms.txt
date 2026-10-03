@@ -1,0 +1,14 @@
+# 暨南解题配方库 (agent-recipe-book)
+> 人类解题经验的机器可读共享库。每条配方含 模型/skill/harness/硬件 与结构化死胡同。
+
+## 索引
+- recipes/recipe-xhs-demo-data-is-not-evidence.md: 拿示范数据把闭环跑通 = 假闭环：主路只有一条，演示数据只能当列格式参考 — 把这条红线定死，并在三个层面同时落地：① 代码层——扫描数据的函数一律排除文件名
+- recipes/recipe-xhs-gitbash-sandbox-write-looks-success.md: Git Bash 里 clone 报成功但目录是空的：沙箱写入假象 + 中文目录名让命令参数编码错乱 — 换一条不依赖 clone 的取数路线：用 curl -sL 把上游仓库的 zip
+- recipes/recipe-xhs-login-only-needs-placeholder-keyword.md: 没有"只登录不抓取"的模式：想先扫码就得先跑一次搜索，于是被迫抓了一个还没验证的方向 — 把顺序倒过来：在启动之前就把方向词定死，而且方向词的来源必须是自有账号的后台导出
+- recipes/recipe-xhs-playwright-persistent-login-msedge.md: 要留下登录态就必须用持久化上下文，可浏览器下载卡死：直接复用系统里的 Edge，别硬下 150MB — 走"用系统现成的浏览器"这条路：launch_persistent_contex
+- recipes/recipe-xhs-site-risk-login-expired-masked-by-retry.md: 抓取节奏太猛被风控踢下线，报错却只写"登录已过期"：重试包装把真实原因吞了 — 三件事按顺序做，顺序不能反：① 先把节奏降下来——把每条之间的间隔从 2 秒提到
+- recipes/recipe-xhs-upstream-patch-drift-manual-apply.md: 一键脚本里的补丁打不上却只报成功：上游依赖已更新，只能按补丁意图手工对齐配置 — 放弃"让补丁文件生效"，改成读意图 → 手工改 → 语法校验 → 关键行复核四步
+
+## 如何被 Agent 读取
+GET api/experiences.json 获取全量结构化数据；GET llms.txt 获取索引。
+详见 CONTRIBUTING.md 与 recipe.schema.md (v3.0)。

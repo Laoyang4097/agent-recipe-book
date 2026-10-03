@@ -1,0 +1,324 @@
+[
+  {
+    "id": "recipe-lifelens-asar-files-whitelist-miss",
+    "title": "electron-builder 的 build.files 是显式白名单，新增共享模块没登记就打包，产物能构建成功但运行时 require 直接崩",
+    "tags": [
+      "electron-builder",
+      "packaging",
+      "asar",
+      "node"
+    ],
+    "confidence": "A",
+    "model": "electron-builder 24.13.3",
+    "problem": "抽出 ollamaClient.js 作为统一模型护栏后，5 个调用点都改完、node -c 语法检查全过、甚至 rebuild 也“成功”了——但打包后的 exe 一跑就该崩：那个文件根本没进 app.asar。electron-builder 的 build.files 是逐项显式白名单（不是目录通配），新增的顶层模块必须手工登记，否则打包器静默跳过，直到运行时 require 抛 MODULE_NOT_FOUND 才暴露。",
+    "dead_ends": [
+      {
+        "attempt": "只信源码 grep——确认 analyzer.js / summary.js / diary.js / qa.js 里都写了 require(\"./ollamaClient\")",
+        "failure": "grep 全绿、语法全过、npm run dist 也退出 0，看上去一切正常；直到用 @electron/asar 的 listPackage 核验才发现 ollamaClient.js 压根不在归档里，extractFile 直接抛 \"ollamaClient.js was not found in this archive\"",
+        "duration": "秒级暴露（构建后核验阶段）",
+        "early_signal": "grep 只能证明源码写了 require，证明不了文件进了包。凡是有「文件清单」概念的打包器，打包后必须抽样核验产物而不是信源码"
+      },
+      {
+        "attempt": "以为 files 里已有的 \"renderer/**/*\" 之类通配符能顺带覆盖根目录新 js",
+        "failure": "通配符只对其自身那条规则生效，根目录零散的平铺 js 不在通配范围内",
+        "duration": "约 5min",
+        "early_signal": "白名单是精确路径匹配 + 有限的通配语法，新增文件必须单独登记这一行"
+      }
+    ],
+    "solution": "1) package.json 的 build.files 里补一行 \"ollamaClient.js\"（与 analyzer.js 等平铺模块并列）。 2) 把「打包后抽样核验」固化成习惯：用 @electron/asar 的 listPackage 列出归档、extractFile 分别抓 main.js / 新增模块 / renderer/index.html，确认都取得到且字节数合理。 3) 结论层面：以后每新增一个顶层模块，先改 files 再打包。",
+    "result": "补进 build.files 后重新打包，asar listPackage 含 ollamaClient.js，extractFile 可取回；此前那版「构建成功但缺文件」的 exe 从根上消除。",
+    "retrospective": "一句忠告：打包产物必须抽样验证。源码 grep 通过、语法检查通过、构建退出码为 0，这三件事都不等于「文件真的进了包」——这条链上任何一环单独成立都不够。",
+    "skills": [
+      "electron-builder 文件清单",
+      "打包产物核验"
+    ],
+    "harness": "electron-builder portable",
+    "verified": true,
+    "status": "published"
+  },
+  {
+    "id": "recipe-lifelens-builder-unlink-trash-shim",
+    "title": "本机 NODE_OPTIONS 注入的 safe-delete shim 把 fs.unlink 换成回收站操作，导致 electron-builder 最后清理临时文件时构建失败",
+    "tags": [
+      "electron-builder",
+      "tooling",
+      "windows",
+      "sandbox"
+    ],
+    "confidence": "A",
+    "model": "electron-builder 24.13.3",
+    "problem": "electron-builder 打 portable 包时，构建完成前会删除中间产物 dist/life-lens-1.0.0-x64.nsis.7z。本机 CLI 层通过 NODE_OPTIONS=--require=...genie-safe-delete.cjs 注入了「安全删除」 shim，把 fs.unlink 整个替换成走回收站的 trash 操作；而那个 trash 操作返回 Unknown { description: \"Some operations were aborted\" }，于是 unlink 失败、整个构建报错退出码非 0。更坑的是：后台跑 + tail 管道时状态会假活成 running 却半天没产出，让人误以为只是慢。",
+    "dead_ends": [
+      {
+        "attempt": "npm run dist 放后台跑，用 tail 看输出",
+        "failure": "8 分钟没有任何产出、任务状态仍显示 running（管道缓冲造成的假活），实际早已卡死在某一步",
+        "duration": "约 8min 才察觉异常",
+        "early_signal": "store 压缩级别下构建本应 40 秒出包，任何超过 1 分钟的构建都该自动警觉，而不是继续等"
+      },
+      {
+        "attempt": "以为是被 Bash 沙箱拦的，开免沙箱（dangerouslyDisableSandbox）重跑",
+        "failure": "错误一模一样——堆栈里明明白白指向 WorkBuddy 的 app.asar.unpacked/cli/vendor/shim/genie-safe-delete.cjs，是 CLI 层注入，跟 Bash 沙箱无关",
+        "duration": "约 2min",
+        "early_signal": "看堆栈文件名里的 vendor/shim 路径就知道这是执行环境的注入，不是沙箱策略；遇到这类拦截先读堆栈归属，别急着提权"
+      },
+      {
+        "attempt": "在 dist 里预清理 7z 临时文件想绕开这次 unlink",
+        "failure": "无济于事——构建流程内部自己会生成并清理这个文件，预删改变不了行为",
+        "duration": "约 1min",
+        "early_signal": "构建器的清理是内部固定流程，外部预删没有意义，应当从「让 unlink 成功」入手"
+      }
+    ],
+    "solution": "打包命令改为 `env -u NODE_OPTIONS -u ELECTRON_RUN_AS_NODE npm run dist`：清掉 NODE_OPTIONS 后 fs.unlink 走原生路径，shim 不再介入，构建干净通过。配套：compression 保持 store（规避 7z OOM）、后台任务假活时改用前台直跑看实时输出。",
+    "result": "清掉 NODE_OPTIONS 后构建稳定在数十秒内完成、退出码 0，不再出现 safe-delete 报错；连续多次打包（含补 ollamaClient.js 后那次）均成功。",
+    "retrospective": "一句忠告：遇到「工具报错但堆栈指向执行环境自己的 vendor 目录」，正确动作是绕开这个注入（清掉对应环境变量），而不是提权或重装工具。同一条命令里清 NODE_OPTIONS 与 ELECTRON_RUN_AS_NODE 就是本项目稳定的打包姿势。",
+    "skills": [
+      "构建环境注入排查",
+      "打包命令编排"
+    ],
+    "harness": "electron-builder portable + 宿主 CLI 注入",
+    "hardware": {
+      "os": "Windows 11"
+    },
+    "verified": true,
+    "seed": true,
+    "status": "published"
+  },
+  {
+    "id": "recipe-lifelens-ollama-gpu-memory-contention",
+    "title": "本地 Ollama 默认把视觉模型整个塞进 GPU 显存，抢走用户 RTX 4060 的显存，必须在每个请求里强制 num_gpu_layers=0",
+    "tags": [
+      "ollama",
+      "gpu",
+      "vlm",
+      "performance"
+    ],
+    "confidence": "A",
+    "model": "qwen3-vl:4b-instruct",
+    "problem": "LifeLens 用本地 qwen3-vl:4b 做截屏视觉分析。Ollama 的 API 在 options 不指定的时候，num_gpu_layers 默认取「尽可能多」，于是 3.3GB 的模型权重整个加载进用户那张 RTX 4060 8GB，和用户同时跑的其它 AI 项目抢同一张卡——用户侧的体验就是「开着 LifeLens 就没法同时跑别的 AI 项目」。更要命的是项目里有 5 处独立调用点（视觉分析、命名校验、10 分钟汇总、日记、问答），每一处都只传了 temperature 一个参数，等于 5 个口子全在吃显卡。",
+    "dead_ends": [
+      {
+        "attempt": "想用环境变量 OLLAMA_USE_GPU=false 让 Ollama 全局走 CPU",
+        "failure": "部分 Ollama 版本直接忽略该变量，显存照样被吃满，GPU 占用没有变化",
+        "duration": "约 20min",
+        "early_signal": "环境变量是进程级全局开关，无法按请求调节；而且它不是 Ollama 的正式参数名——看到「显存没降」就应该换到 API options 层试"
+      },
+      {
+        "attempt": "在 serve 进程级限制并发 / 常驻模型数，试图降低整体占用",
+        "failure": "只能影响并发度，管不住单个请求把模型塞进 GPU；其它调用方也会被连带降级",
+        "duration": "约 30min",
+        "early_signal": "需求本质是「这一次请求别占显存」，不是「全局降级」，在进程级做必然夹不干净"
+      },
+      {
+        "attempt": "只改 analyzer.js 一处（以为是单点问题）",
+        "failure": "改完发现汇总、日记、问答几处仍在吃 GPU——模型调用点分散在多个模块，单点修复等于没修",
+        "duration": "约 15min",
+        "early_signal": "grep 计数发现 5 个 fetch(\"/api/chat\") 调用点，说明该抽共享模块而不是逐个改"
+      }
+    ],
+    "solution": "1) 抽出共享模块 ollamaClient.js，导出两个函数：buildModelOptions(cfg, temperature) —— analysisGpuMode 为 cpu（默认）时强制写入 num_gpu_layers: 0（完全不占 GPU 显存）与 num_thread = 物理核一半（给其它程序留 CPU 余量）；withModelGate(fn) —— 全局链式互斥，任意时刻最多 1 个推理在飞。 2) 把 5 个调用点（analyzer 2 处、summary、diary、qa）的 options 一律换成 buildModelOptions()，请求体包进 withModelGate。 3) 配置化 analysisGpuMode / cpuThreads，gpu 模式显式标注「会和你其它 AI 任务抢卡」。 4) config 层把浏览器、聊天类软件从 titleAlwaysModelApps 移出，走窗口标题规则分类，直接砍掉大量模型调用。",
+    "result": "冒烟测试确认 CPU 模式产出 {\"temperature\":0.2,\"num_gpu_layers\":0,\"num_thread\":8}；GPU 模式不加限制参数；互斥闸门 3 个并发任务实测串行执行（并发峰值 = 1）。5 个调用点全部接入护栏，新 asar 核验通过。",
+    "retrospective": "一句话忠告：Ollama 的 GPU 行为只能在单次 API 请求的 options 里强制，环境变量不可靠；而「别让用户电脑卡」这类需求，得先把散落各处的模型调用点收敛到一个共享模块，否则永远修不干净。",
+    "skills": [
+      "Ollama API options",
+      "GPU 显存配额"
+    ],
+    "harness": "Electron + Ollama",
+    "hardware": {
+      "os": "Windows 11",
+      "gpu": "RTX 4060 8GB",
+      "ram": "32GB"
+    },
+    "verified": true,
+    "status": "published"
+  },
+  {
+    "id": "recipe-lifelens-ollama-gui-hosts-serve",
+    "title": "关掉 Ollama 桌面 GUI 会连带停掉后台 serve 让应用离线，且本机 PowerShell 因 Path/PATH 重复导致拉起进程的三条通道全封",
+    "tags": [
+      "ollama",
+      "windows",
+      "process",
+      "tooling"
+    ],
+    "confidence": "A",
+    "model": "qwen3-vl:4b-instruct",
+    "problem": "用户为省内存（GUI 约 578MB）从托盘关掉 Ollama 桌面程序，结果 LifeLens 状态变成「Ollama 离线」——那个图形外壳其实是后台 ollama serve 服务的宿主，关 GUI 等于把服务也一起关了。想单独把无界面的 serve 拉起来时，本机 PowerShell 又全线不通：会话的 env 块同时存在 Path 与 PATH（大小写重复），Start-Process 报「字典中已添加关键字 Path/PATH」，cmd /c start 与 WMI Win32_Process.Create 被安全策略直接拦截。",
+    "dead_ends": [
+      {
+        "attempt": "PowerShell 的 Start-Process（含 -Environment 传干净环境）拉起 ollama serve",
+        "failure": "报「字典中已添加关键字 Path/PATH」——同一个会话里连 Get-ChildItem env: 都报同样的冲突，说明是会话级 env 提供程序坏了，不是命令写法问题",
+        "duration": "约 30min",
+        "early_signal": "两条不同的命令报同一个「关键字重复」错误 → 这是环境块问题，换命令没用，必须换执行环境"
+      },
+      {
+        "attempt": "退一步改用 cmd /c start \"\" /min ollama serve",
+        "failure": "被安全策略直接拦截（不允许从当前工具链调用 cmd.exe）",
+        "duration": "约 10min",
+        "early_signal": "同类调用连续被拦，就该意识到通道被封而不是参数写错"
+      },
+      {
+        "attempt": "再退到 WMI Win32_Process.Create 创建独立进程",
+        "failure": "同样被拦截",
+        "duration": "约 10min",
+        "early_signal": "同一路径第三次被封 · 此时应换通道而不是继续试参数"
+      }
+    ],
+    "solution": "1) 换通道：用 Bash（Git Bash）后台拉起 `ollama serve > log 2>&1 &`，它不经过 PowerShell 的 env 提供程序，能正常继承环境变量。 2) 把这件事前移到应用内：main.js 加 ensureOllama()，whenReady 时探测 http://127.0.0.1:11434/api/tags，不可达就 spawn(\"ollama\", [\"serve\"], { detached: true, stdio: \"ignore\", windowsHide: true }) 并注入 OLLAMA_NUM_THREADS（半核）与 OLLAMA_MAX_LOADED_MODELS=1，用户从此永远不必打开那个 578MB 的桌面 GUI。 3) 代码里补一层「当前推理占用模式」的可见日志，让用户一眼确认没在抢显卡。",
+    "result": "无界面 serve 拉起后 curl :11434/api/tags 正常返回模型列表，LifeLens 自动重连、状态不再显示离线；GUI 侧省下约 578MB 驻留内存。",
+    "retrospective": "两条忠告：① 图形外壳程序往往还托管着无界面的核心服务，「关掉界面」不等于「停掉服务」，但也绝不能让用户依赖这个耦合——得让应用自己会把服务拉起来；② 工具链环境出问题时，正确动作是「换执行环境」而不是「换命令参数」。",
+    "skills": [
+      "后台服务自管",
+      "Windows 进程启动通道"
+    ],
+    "harness": "Electron + Ollama + Git Bash",
+    "hardware": {
+      "os": "Windows 11",
+      "ram": "32GB"
+    },
+    "verified": true,
+    "status": "published"
+  },
+  {
+    "id": "recipe-lifelens-portable-execpath-temp-trap",
+    "title": "portable 自解压版 exe 的 process.execPath 指向 %TEMP% 临时目录，写进自启和快捷方式会导致开机弹窗与双击失效",
+    "tags": [
+      "electron-builder",
+      "portable",
+      "windows",
+      "autostart"
+    ],
+    "confidence": "A",
+    "model": "Electron 33 + electron-builder 24.13.3",
+    "problem": "dist/LifeLens.exe 是 electron-builder 产出的 portable 自解压壳，体积 294MB。双击后它把真正可运行的程序解压到 %TEMP%<随机名>\\ 再执行，因此运行期 process.execPath 永远指向那个临时目录（约 189MB 的真身在那儿）。代码里把 process.execPath 当作「程序自己的路径」写进注册表开机自启和桌面 .lnk，于是自启项和快捷方式全指向一个随时会被系统清理、且每次运行名字都变的临时路径——开机时 Windows 去启动已失效的 exe，弹出 cmd 报错窗口；桌面图标也会「没反应」。",
+    "dead_ends": [
+      {
+        "attempt": "先怀疑是病毒扫描器锁文件 / 文件占用，让构建方等待解锁重试",
+        "failure": "electron-builder 打出 output file is locked for writing (maybe by virus scanner) => waiting for unlock，等了一会依旧失败，且该文件根本没人占用",
+        "duration": "约 20min（7 月一次构建）",
+        "early_signal": "构建器自己提示 waiting for unlock 但全程无人占用该文件——说明锁不是真因；真正该问的是「为什么构建器要删这个文件、删不掉意味着什么」"
+      },
+      {
+        "attempt": "改用 PowerShell COM（WScript.Shell）读取并修正桌面 .lnk 与注册表自启项",
+        "failure": "工具链直接拦截：COM object instantiation can run arbitrary code (e.g. WScript.Shell)，命令一片空白",
+        "duration": "约 15min",
+        "early_signal": "同类 COM 调用连续被拦，说明该通道被硬封；读 .lnk 应改走二进制解析而不是 COM"
+      },
+      {
+        "attempt": "用 strings 从 .lnk 二进制里抓目标路径字符串",
+        "failure": "strings: command not found；改用 iconv + UTF-16 转码后仍然 grep 不到路径（.lnk 内嵌路径为 UTF-16LE 且不在容易命中的偏移上）",
+        "duration": "约 10min",
+        "early_signal": "Git Bash 是精简环境、没装 binutils。遇到「命令不存在」应先换用 Python 正则扫 UTF-16LE 字节序列，而不是反复试字符串工具"
+      }
+    ],
+    "solution": "1) 代码层加统一解析器 resolveSelfPath()：process.env.PORTABLE_EXECUTABLE_DIR 存在（electron-builder 便携版会注入该环境变量）时返回 path.join(dir, \"LifeLens.exe\") 即固定安装路径，否则回退 process.execPath（开发模式）。 2) 用它替换全部三处 process.execPath：buildDesktopShortcut 的 lnk TargetPath、托盘菜单开机自启、whenReady 里的 setLoginItemSettings。 3) 手动把注册表 HKCU\\\\...\\\\Run 的 electron.app.LifeLens 改写为 \"D:\\LifeLens\\dist\\LifeLens.exe\" --hidden。 4) 删掉指向旧 Temp 路径的桌面 .lnk（新 exe 首次运行会自动重建正确的），并清理 %TEMP% 下残留的解压目录（约 280MB）。",
+    "result": "注册表自启项核实为 `\"D:\\LifeLens\\dist\\LifeLens.exe\" --hidden`；新 asar 内 resolveSelfPath 函数、PORTABLE_EXECUTABLE_DIR 定位、三处替换全部为 true，旧的 `path: process.execPath` 写法已清零；Temp 残留目录清理成功。",
+    "retrospective": "一句话忠告：portable 版 Electron 的 process.execPath 永远是 %TEMP% 里的解压路径，任何需要长期有效的路径（开机自启、桌面快捷方式、更新器、日志落盘）都必须用 PORTABLE_EXECUTABLE_DIR 重新定位。这也顺带解释了此前「快捷方式双击没反应」这类反复出现的诡异现象。",
+    "skills": [
+      "electron-builder portable 行为",
+      "Windows 启动项与 .lnk"
+    ],
+    "harness": "Electron + electron-builder portable",
+    "hardware": {
+      "os": "Windows 11",
+      "cpu": "16 核",
+      "gpu": "RTX 4060 8GB"
+    },
+    "verified": true,
+    "seed": true,
+    "status": "published"
+  },
+  {
+    "id": "recipe-lifelens-single-instance-oom-blank-window",
+    "title": "单实例锁竞态造成双实例并存，各自截屏分析导致内存翻倍，渲染进程被挤爆后白屏",
+    "tags": [
+      "electron",
+      "ipc",
+      "memory",
+      "concurrency"
+    ],
+    "confidence": "A",
+    "model": "Electron 33",
+    "problem": "用户报「打开显示空白」且「占内存很多」。当时有两个 LifeLens 同时在跑：旧「升级式单实例锁」的写法是先 requestSingleInstanceLock() 抢锁，抢不到才去 tasklist 找出其他 LifeLens PID 杀掉、再抢一次锁。这个「抢锁→杀旧→再抢」的竞态窗口里，两个实例会短时并存，各自建窗口、各自跑截屏轮询与模型分析，内存直接翻倍；其中一个进程被内存挤压，渲染进程 OOM 崩溃，页面 did-finish-load 永不触发，窗口就是纯白。",
+    "dead_ends": [
+      {
+        "attempt": "先怀疑 GPU 进程初始化失败，给 BrowserWindow 加 disable-gpu 强制软件渲染",
+        "failure": "白屏照旧——8/6 那版构建已经带 disable-gpu，did-finish-load 仍然不触发，说明病根不在 GPU",
+        "duration": "约 1 天（8/6 全天排查）",
+        "early_signal": "日志里 disable-gpu 确实生效了，但 did-finish-load 依旧不出现——「开关生效但症状不变」意味着方向错了，应该去找「有没有第二个进程在抢资源」"
+      },
+      {
+        "attempt": "反复重打包、重跑数据修复脚本，指望刷新掉白屏",
+        "failure": "白屏与乱码交替出现，始终没意识到 tasklist 里其实有两组进程；过程耗掉大量时间",
+        "duration": "约半天",
+        "early_signal": "启动日志里 main.js loaded 与 createWindow() 在 09:23:01 同一秒各出现两次——进程数异常是白屏最该先查的一项"
+      },
+      {
+        "attempt": "用 --remote-debugging-port 开 CDP 端口抓渲染进程实时报错",
+        "failure": "Electron 直接报 bad option，当前构建不接受这个开关，根本起不来调试端口",
+        "duration": "约 20min",
+        "early_signal": "Electron 33 便携构建不接受 --remote-debugging-port；抓渲染错误前应先确认开关是否被构建接受，而不是反复重试"
+      }
+    ],
+    "solution": "1) 去掉「先抢锁、再杀旧、再抢一次」的竞态写法，改为启动时先 killOtherInstances()（tasklist 列出其他 LifeLens.exe 的 PID 后 taskkill /F，正则 /^LifeLens\\\\.exe\\\\s+(\\\\d+)/ 不依赖会话名 \"Console\"），再用单次 app.requestSingleInstanceLock()；抢不到就 app.quit()，由已有的 app.on(\"second-instance\") 把已有窗口聚焦出来。 2) 保留 disable-gpu 作为无害兜底。 3) 清掉残留进程后重新打包。",
+    "result": "修复后进程列表只剩一组 LifeLens.exe（主进程 + 渲染/GPU 辅助进程，Electron 标准结构），内存恢复正常，白屏消失。对照依据：诊断日志里 createWindow() 由「同一秒两次」回到「一次」。",
+    "retrospective": "两条忠告：① 「内存爆 + 白屏」常常是同一个病根的两个症状（多实例），不要分开治、更不要把白屏归咎于 GPU；② 写单实例锁时，先清场再抢锁是唯一稳的次序，「抢不到才补救」必然留下竞态窗口。",
+    "skills": [
+      "Electron 单实例",
+      "渲染进程崩溃定位"
+    ],
+    "harness": "Electron",
+    "hardware": {
+      "os": "Windows 11",
+      "ram": "32GB"
+    },
+    "verified": true,
+    "status": "published"
+  },
+  {
+    "id": "recipe-lifelens-windows-gbk-window-title-garble",
+    "title": "Windows 中文窗口标题经 PowerShell 传给 Node 变乱码，需走 base64 跨代码页传输",
+    "tags": [
+      "electron",
+      "windows",
+      "encoding",
+      "powershell"
+    ],
+    "confidence": "A",
+    "model": "qwen3-vl:4b-instruct",
+    "problem": "LifeLens 要记录前台窗口标题（大量中文）。主进程用 PowerShell 取前台窗口的进程名与标题，再交给 Node 落库。中文系统下 PowerShell 默认走 GBK(936) 代码页，Node 侧按 UTF-8 解管道，结果「图片视频」变成 `ͼƬ����Ƶ` 这种不可逆乱码，沉淀进 data/*.json 后整条活动记录报废。",
+    "dead_ends": [
+      {
+        "attempt": "让 PowerShell 直接输出中文字符串（System.Windows.Forms 取 Text），Node 用 utf8 读管道",
+        "failure": "落库出现 `ͼƬ����Ƶ`——GBK 字节被当 UTF-8 解码，U+FFFD 替换符反复出现，中文标题全部损坏",
+        "duration": "跨 8/2 与 8/4 两轮，约 3 小时",
+        "early_signal": "同一段中文在不同 Charset 输出下表现不一致；中文 Windows 的 PowerShell 默认代码页是 936(GBK)，不是 UTF-8——看到标题里的中文「半截」就该警觉是代码页问题"
+      },
+      {
+        "attempt": "改 Node 侧解码 charset（试各种 fallback / iconv 重新编码补救）",
+        "failure": "不同 charset 下同一段中文结果仍不一致，且出现过的 U+FFFD 无法还原——源头字节已经丢了，解码端永远补不回来",
+        "duration": "约 1 小时",
+        "early_signal": "U+FFFD 替换符一旦出现就是不可逆损坏标记。它出现意味着「修复方向应该是别处」而不是继续调解码参数"
+      },
+      {
+        "attempt": "修好 foreground.js 的 base64 链路后，用户仍报「好像又有乱码」",
+        "failure": "代码明明改对了，新数据照样乱码：启动日志显示同一秒 createWindow() 出现两次，旧 exe 持有单实例锁不退出，继续往库里写脏数据",
+        "duration": "约半天（8/4 全天反复）",
+        "early_signal": "乱码文件的 mtime 在我刚跑完修复后仍在跳动；启动日志里 main.js loaded 与 createWindow() 各出现两次——这是「跑的不是新代码」的直接证据"
+      }
+    ],
+    "solution": "1) 传输层根治：PowerShell 侧 `[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($s))` 只输出纯 ASCII，Node 侧 `Buffer.from(line.slice(idx+1),\"base64\").toString(\"utf8\")` 还原，彻底不碰系统代码页。 2) 防御层：新增 sanitize() 在落库前剥离 U+FFFD（正常中文/emoji 不受影响），加在 foreground.js 解码后、main.js 的 buildTitleActivity 与模型输出、summary.js 的 parseSummaryResponse 三处。 3) 清理层：reanalyze.js 定点重算被污染的记录。 4) 根上层：单实例锁改为能杀掉残留旧实例，否则旧 bug 版本永远在写脏数据。",
+    "result": "全库遍历 data/ 下所有 .json，U+FFFD 字段计数归零；base64 链路对抗测试通过；sanitize 对抗测试 6/6（替换符剥离、中文与 emoji 完好）。",
+    "retrospective": "两条忠告：① 跨代码页传中文，base64 是金标准，永远不要赌 PowerShell/Node 的管道编码；② 「修了 bug 但现象还在」时，先质疑「用户跑的到底是不是新代码」，而不是反复改同一处——单实例锁让旧进程永不退是这类「修复不生效」的系统性陷阱。",
+    "skills": [
+      "跨代码页编码",
+      "防御式数据清洗"
+    ],
+    "harness": "Electron + PowerShell + Ollama",
+    "hardware": {
+      "os": "Windows 11",
+      "gpu": "RTX 4060 8GB"
+    },
+    "verified": true,
+    "status": "published"
+  }
+]

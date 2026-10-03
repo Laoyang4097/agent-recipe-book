@@ -1,0 +1,15 @@
+# 暨南解题配方库 (agent-recipe-book)
+> 人类解题经验的机器可读共享库。每条配方含 模型/skill/harness/硬件 与结构化死胡同。
+
+## 索引
+- recipes/recipe-lifelens-asar-files-whitelist-miss.md: electron-builder 的 build.files 是显式白名单，新增共享模块没登记就打包，产物能构建成功但运行时 require 直接崩 — 1) package.json 的 build.files 里补一行 "olla
+- recipes/recipe-lifelens-builder-unlink-trash-shim.md: 本机 NODE_OPTIONS 注入的 safe-delete shim 把 fs.unlink 换成回收站操作，导致 electron-builder 最后清理临时文件时构建失败 — 打包命令改为 `env -u NODE_OPTIONS -u ELECTRON_
+- recipes/recipe-lifelens-ollama-gpu-memory-contention.md: 本地 Ollama 默认把视觉模型整个塞进 GPU 显存，抢走用户 RTX 4060 的显存，必须在每个请求里强制 num_gpu_layers=0 — 1) 抽出共享模块 ollamaClient.js，导出两个函数：buildMo
+- recipes/recipe-lifelens-ollama-gui-hosts-serve.md: 关掉 Ollama 桌面 GUI 会连带停掉后台 serve 让应用离线，且本机 PowerShell 因 Path/PATH 重复导致拉起进程的三条通道全封 — 1) 换通道：用 Bash（Git Bash）后台拉起 `ollama serv
+- recipes/recipe-lifelens-portable-execpath-temp-trap.md: portable 自解压版 exe 的 process.execPath 指向 %TEMP% 临时目录，写进自启和快捷方式会导致开机弹窗与双击失效 — 1) 代码层加统一解析器 resolveSelfPath()：process.e
+- recipes/recipe-lifelens-single-instance-oom-blank-window.md: 单实例锁竞态造成双实例并存，各自截屏分析导致内存翻倍，渲染进程被挤爆后白屏 — 1) 去掉「先抢锁、再杀旧、再抢一次」的竞态写法，改为启动时先 killOthe
+- recipes/recipe-lifelens-windows-gbk-window-title-garble.md: Windows 中文窗口标题经 PowerShell 传给 Node 变乱码，需走 base64 跨代码页传输 — 1) 传输层根治：PowerShell 侧 `[Convert]::ToBase
+
+## 如何被 Agent 读取
+GET api/experiences.json 获取全量结构化数据；GET llms.txt 获取索引。
+详见 CONTRIBUTING.md 与 recipe.schema.md (v3.0)。
