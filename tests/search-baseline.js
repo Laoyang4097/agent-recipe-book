@@ -317,9 +317,55 @@ check(
   groupCounts.map((g) => `${g.label}=${g.n}`).join(" ") + ` 合计 ${sumGroups} vs ${RECIPES.length}`
 );
 
+/* ---------------- 缺陷 F：同分排序不得依赖输入顺序 ---------------- */
+/* 背景（recipe-search-tiebreak-silent-reorder）：排序曾只有「有效分降序」一条规则，
+   同分时谁在前取决于 experiences.json 里配方的排列顺序（即 rebuild 的文件遍历顺序）。
+   后果是新增一条配方会静默改写既有答案的排名，而内容根本没变。
+   本组断言锁住：任意打乱/逆序/轮转输入，Top5 必须完全一致。 */
+section("五、排序确定性（缺陷 F）");
+{
+  const Q = "抓回来是乱码";
+  const topIds = (arr) =>
+    searchRecipes(arr, Q, { limit: 5 }).results.map((r) => r.recipe.id);
+
+  const base = topIds(RECIPES);
+  const cut = Math.floor(RECIPES.length / 3);
+  const half = Math.ceil(RECIPES.length / 2);
+
+  /* 用「确定性置换」而不是单次随机：随机只抽一个样本，可能恰好没扰动到同分对，
+     造成测试看似通过实则没测到（假绿）。这里覆盖 6 种结构性重排。 */
+  const variants = {
+    逆序: [...RECIPES].reverse(),
+    "按 id 升序": [...RECIPES].sort((a, b) => String(a.id).localeCompare(String(b.id))),
+    "按 id 降序": [...RECIPES].sort((a, b) => String(b.id).localeCompare(String(a.id))),
+    "按标题长度降序": [...RECIPES].sort(
+      (a, b) => String(b.title || "").length - String(a.title || "").length
+    ),
+    轮转三分一: [...RECIPES.slice(cut), ...RECIPES.slice(0, cut)],
+    前半后半交错: (() => {
+      const a = RECIPES.slice(0, half);
+      const b = RECIPES.slice(half);
+      const out = [];
+      for (let i = 0; i < Math.max(a.length, b.length); i++) {
+        if (b[i]) out.push(b[i]);
+        if (a[i]) out.push(a[i]);
+      }
+      return out;
+    })(),
+  };
+
+  for (const [name, arr] of Object.entries(variants)) {
+    check(
+      `${name} 后 Top5 完全一致`,
+      topIds(arr).join() === base.join(),
+      `实际=${topIds(arr).join(" | ")}`
+    );
+  }
+}
+
 /* ---------------- 汇总 ---------------- */
 if (failures.length) {
-  console.log(`\n提示：检索质量回归失败 —— 优先检查 lib/search.js 的打分权重与同义词表。`);
+  console.log(`\n提示：检索质量回归失败 —— 优先检查 lib/search.js 的打分权重、同义词表与同分 tie-break。`);
 }
 done();
 console.log(`\n✅ 全部通过（正例 ${posPass}/${posTotal}，反例 ${negPass}/${negTotal}）`);
