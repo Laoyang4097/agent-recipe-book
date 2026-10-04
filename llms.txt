@@ -1,4 +1,4 @@
-# 暨南解题配方库 (agent-recipe-book)
+# agent-recipe-book（解题配方库）
 > 人类解题经验的机器可读共享库。每条配方含 模型/skill/harness/硬件 与结构化死胡同。
 
 ## 索引
@@ -22,7 +22,7 @@
 - recipes/recipe-managed-python-env-pitfalls.md: 在 WorkBuddy 托管 Python 环境跑依赖脚本的坑（缺包 / 丢 git 身份 / cwd 不持久 / YAML 日期序列化） — ① 建隔离 venv 装依赖：`python -m venv .../envs/
 - recipes/recipe-mcp-trust-needs-client-restart.md: 改完 MCP 配置并点了信任，当前会话仍看不到工具——MCP 在客户端启动时加载，必须重启或开新会话 — 1) 先排除配置本身：在命令行直接跑一次 server（如 printf 一行 
 - recipes/recipe-pj-guess-as-conclusion.md: 把拍脑袋的估计当结论写进文档 —— 20 分钟能测出来的数，用「大概」代替 — 把「性能 / 容量」类断言统一改成「实测 + 拐点」写法：写一个 20 行的基准
-- recipes/recipe-pj-requirement-misremembered.md: 把主办方要求记错，按「常识」排期 —— 差点白耗 2-3 天做错重点 — 把主办方原文拆成三栏清单：初赛必交 / 初赛可选 / 决赛必交，每条标注原文出处
+- recipes/recipe-pj-requirement-misremembered.md: 把需求原文记错，按「常识」排期 —— 差点白耗 2-3 天做错重点 — 把需求原文拆成三栏清单：第一期必交 / 第一期可选 / 最终交付必交，每条标注原
 - recipes/recipe-pj-rule-from-memory.md: 引用「规则」时凭记忆作答，没打开原文核对 —— 结论当场被问倒 — ① 引用任何规则/字段/参数前，先打开原文逐项核对，不要用记忆代替；② 给结论时
 - recipes/recipe-py-antibot-stop-on-hit.md: 反爬遇即停：requests 默认 UA 撞 403+JS/DataDome 挑战与 Cloudflare 403，命中即弃、零绕过 — 可复用步骤：① 抓取任何站点第一条请求就用 try/except 包住，并显式 
 - recipes/recipe-py-content-encoding-double-decode.md: Content-Encoding 静默解压：requests 已自动解 gzip/deflate，手动再解一次即崩；br 未装库则静默乱码 — 可跑要点：① 默认别手动解压——requests 会自动处理 gzip/defl

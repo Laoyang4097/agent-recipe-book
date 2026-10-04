@@ -626,7 +626,7 @@ def rebuild():
     # 重建 llms.txt（仅 published，原子写）
     pub = [r for r in recipes if r.get("status") == "published"]
     lines = [
-        "# 暨南解题配方库 (agent-recipe-book)\n",
+        "# agent-recipe-book（解题配方库）\n",
         "> 人类解题经验的机器可读共享库。每条配方含 模型/skill/harness/硬件 与结构化死胡同。\n\n",
         "## 索引\n",
     ]

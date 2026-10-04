@@ -44,7 +44,8 @@ agent-recipe-book/
 
 **摆放松规**
 - 根目录只放「门面与契约」：`README` / `LICENSE` / `llms.txt` / `recipe.schema.md` / `PRD.md` / `CONTRIBUTING.md` / `.gitignore`。
-- 产品运行代码在 `api/`；内容真源在 `recipes/`；**所有非运行类文档进 `docs/`**，调研过程稿统一进 `docs/research/` 且必须有 `INDEX.md`。
+- 产品运行代码在 `api/`；内容真源在 `recipes/`；**所有非运行类文档进 `docs/`**。
+- **过程调研稿进 `docs/research/`，但该目录不入库**（已列入 `.gitignore`，本地保留）：它记录的是选型与内部策略，含校内/赛事相关信息，不得随公开仓库外泄；目录内仍需维护 `INDEX.md` 导航（防文档腐烂）。
 - 不在根目录堆散文件、不创建无说明的临时目录。
 
 ---
@@ -93,10 +94,10 @@ docs(governance): 建立仓库治理标准 v1.0
 
 - 采用语义化版本 `vMAJOR.MINOR.PATCH`，里程碑打**注解 tag**：
   ```bash
-  git tag -a v0.1 -m "初赛前快照：架构+写入闭环+1真实配方+竞品分析"
+  git tag -a v0.1 -m "首个公开快照：架构+写入闭环+1真实配方+竞品分析"
   git push origin v0.1
   ```
-- `v0.x` 竞赛阶段：`v0.1`（初赛）、`v0.2`（复赛）等；赛后 1.0 起进入正式 semver。
+- `v0.x` 预发布阶段：`v0.1`、`v0.2` 等；进入正式运营后 1.0 起沿用 semver。
 - Tag 只标记**可演示/可发布**的 main 状态，不标中间态。
 
 ---
@@ -137,7 +138,7 @@ docs(governance): 建立仓库治理标准 v1.0
 ## 9. 文档规范
 
 - **根目录契约文档**（`PRD.md` / `recipe.schema.md` / `CONTRIBUTING.md` / `README.md`）是产品权威，改动需谨慎并在 commit 注明。
-- **过程调研稿**进 `docs/research/`，且必须维护 `docs/research/INDEX.md` 导航（防文档腐烂）。
+- **过程调研稿**进 `docs/research/`（**该目录不入库**，见 §2 摆放松规），且必须维护 `docs/research/INDEX.md` 导航（防文档腐烂）。
 - 所有文档中文为主，技术术语保留英文原样。
 
 ---

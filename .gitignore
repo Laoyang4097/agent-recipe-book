@@ -29,3 +29,7 @@ npm-debug.log*
 # 网站离线兜底数据（由 api/experiences.json 生成；不入库以避免与单一真源漂移）
 assets/recipes-data.js
 *.bak_boundary
+
+# 过程调研稿 / 内部策略（含校内与赛事相关信息，仅本地保留，不外泄到公开仓库）
+# 2026-10-05 从公开索引移除（git rm --cached，本地文件未删）
+docs/research/
