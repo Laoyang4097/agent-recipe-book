@@ -120,12 +120,14 @@ agent-recipe-book/
 cd agent-recipe-book
 python -m http.server 8099      # 然后打开 http://127.0.0.1:8099/
 
-# 跑全部回归测试（零依赖；退出码非 0 = 回退）
-npm test                        # = test:search + test:mcp
+# 跑全部回归测试（零第三方依赖；退出码非 0 = 回退）
+# 口径以命令自己的输出为准（「总计（N 个文件）：X 通过 / Y 失败」）。
+# 刻意不写死断言数——它会随功能增长变成下一份过时数字（见仓库自己的 BL-020 教训）。
+npm test
 
 # 单跑某一个
-node tests/search-baseline.js   # 46 项：检索质量基线
-node tests/mcp-smoke.js         # 42 项：MCP 协议 / 工具 / 校验 / 只读边界
+node tests/search-baseline.js   # 检索质量基线：正例 / 反例 / 元配方不抢 Top1 / 英文短词不穿透词边界
+node tests/mcp-smoke.js         # 真 spawn 子进程走 stdio JSON-RPC：握手 / 工具 / 参数校验 / 只读边界
 
 # 起 MCP Server（stdio）
 node mcp/server.js              # 挂载说明见 mcp/README.md

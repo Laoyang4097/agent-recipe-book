@@ -13,6 +13,28 @@
        system-ui / Segoe UI / PingFang SC / Microsoft YaHei —— 首屏外部依赖归零。 -->
 </head>
 <body>
+  <!-- 本地双击打开（file://）的兜底提示。
+       浏览器会以 CORS 策略拦掉 ES Module 与 fetch，页面只会显示静态首屏、拿不到配方数据。
+       与其让人对着空白列表怀疑下载坏了，不如当场把正确打开方式写出来。
+       注意：这里刻意写成普通内联脚本（非 module）——module 本身正是被拦的那个，靠它兜不了底。 -->
+  <script>
+    if (location.protocol === "file:") {
+      var b = document.createElement("div");
+      b.setAttribute("role", "alert");
+      b.style.cssText =
+        "position:fixed;inset:0 0 auto 0;z-index:9999;padding:18px 22px;" +
+        "background:#2b1f00;color:#ffe9b0;border-bottom:2px solid #ffcf5c;" +
+        "font:15px/1.7 system-ui,'PingFang SC','Microsoft YaHei',sans-serif";
+      b.innerHTML =
+        "⚠️ 你是<b>双击本地文件</b>打开的（file://），浏览器出于安全策略禁止读取配方数据，所以列表是空的。<br>" +
+        "请改用 HTTP 打开：在本目录执行 <code>python -m http.server 8099</code>，然后访问 " +
+        "<b>http://127.0.0.1:8099/</b>。<br>或直接看线上版：" +
+        '<a style="color:#ffcf5c" href="https://laoyang4097.github.io/agent-recipe-book/">' +
+        "laoyang4097.github.io/agent-recipe-book</a>";
+      document.documentElement.appendChild(b);
+    }
+  </script>
+
   <!-- 顶部细进度/扫描：仅作必要状态指示，非装饰 -->
   <div class="topbar" aria-hidden="true"></div>
 
