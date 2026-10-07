@@ -92,7 +92,7 @@ curl https://laoyang4097.github.io/agent-recipe-book/api/experiences.json
 agent-recipe-book/
 ├── README.md          # 本文件（门面）
 ├── LICENSE            # AGPL-3.0（代码）/ 配方数据 CC BY-SA 4.0
-├── package.json       # Node 侧元信息（type=module；零第三方依赖）
+├── package.json       # Node 侧元信息（type=module；运行时零第三方依赖，devDependencies 仅 ESLint/Prettier）
 ├── llms.txt           # Agent 索引入口（由 recipes/ 派生）
 ├── recipe.schema.md   # 配方字段规范（核心契约）
 ├── PRD.md             # 产品需求文档
@@ -121,7 +121,7 @@ agent-recipe-book/
 cd agent-recipe-book
 python -m http.server 8099      # 然后打开 http://127.0.0.1:8099/
 
-# 跑全部回归测试（零第三方依赖；退出码非 0 = 回退）
+# 跑全部回归测试（运行时零第三方依赖，无需 npm install 即可跑；退出码非 0 = 回退）
 # 口径以命令自己的输出为准（「总计（N 个文件）：X 通过 / Y 失败」）。
 # 刻意不写死断言数——它会随功能增长变成下一份过时数字（见仓库自己的 BL-020 教训）。
 npm test
