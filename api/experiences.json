@@ -863,6 +863,48 @@
     "contributor_id": "anon-2f183a"
   },
   {
+    "id": "recipe-miss-detect-relative-score-dead-threshold",
+    "title": "拿归一化匹配度当「没找到」的阈值，这条分支永远走不到——Top1 恒为 100%",
+    "tags": [
+      "检索",
+      "阈值",
+      "归一化",
+      "MCP",
+      "可观测性"
+    ],
+    "model": "Node 22 / mcp/server.js 的 search_recipes",
+    "problem": "给 MCP 检索加「未命中检测」时，很自然地在返回体里取 top1 的 matchPct，写 「if (topPct < 50) 记为缺口」。上线后缺口日志一条都没有，而 matched 明明是 33——因为 matchPct 是相对 Top1 归一化出来的比例，第一名永远是 100%，这个条件对任何查询都恒为假，分支是死代码。",
+    "dead_ends": [
+      {
+        "attempt": "用「topPct < 50」判定「库里没有对得上的经验」",
+        "failure": "matchPct 的定义是 score / top1Score * 100，Top1 恒等于 100。条件恒假 -> 缺口日志 0 条，而同样这批查询里 matched 高达 33，说明不是真没命中，是判据压根不成立。",
+        "duration": "写完 18 条测试才发现 4 条失败，回头排查约 30 分钟",
+        "early_signal": "日志/计数字段一直为空，但同一条查询的 matched 字段是个正数——两个数字互相矛盾时，先怀疑判据而不是怀疑数据"
+      },
+      {
+        "attempt": "既然相对值不行，就换成原始分 raw score，取「topScore < 5」当阈值",
+        "failure": "原始分分不开「噪声查询」和「真实查询」。实测：乱输「qqzz 完全不存在的主题」，Top1 原始分是 6；真实问题「爬虫被封 IP 了」，Top1 原始分也是 6。中文二元组切词下，任意查询都能凑出若干个 matched>0 的碎片，分数落在同一个量级。阈值放哪都会同时误杀真查询或漏掉噪声。",
+        "duration": "手动 spawn server 打探针，两种查询各跑一遍，约 20 分钟",
+        "early_signal": "你开始纠结「阈值到底设 4 还是 6」——这本身就是信号：两个分布重叠时，调阈值是徒劳的"
+      },
+      {
+        "attempt": "觉得「未命中」应该由检索层给出，让检索函数在低分时返回 matched=0",
+        "failure": "语义被污染了。matched 是「命中了几条」的事实计数，把它改造成「我认为你没命中」会让下游所有依赖 matched 的展示与统计一起失真，且不可逆（拿不回真实命中数）。",
+        "duration": "设计阶段否掉，未实施",
+        "early_signal": "想改一个字段的定义来绕开判据问题，而不是改判据本身"
+      }
+    ],
+    "solution": "① 先搞清楚分数是怎么算出来的——相对归一化的分数不能当绝对阈值，只有原始分或未归一化的绝对量才有阈值语义。② 优先选结构性事实当判据，而不是分数：这里最终用「matched === 0」（一条都没命中）作为默认判据，因为它是一个不依赖任何刻度的事实。③ 分数阈值降级为可选开关（RECIPE_MISS_SCORE=n，默认不设即不启用），把「要不要用分数判定」的决定权交给部署方，而不是替他猜一个数字。④ 任何新增的判定分支，都要先手动 spawn 服务打探针，用噪声查询和真实查询各跑一遍，看两个分布是否可分——不可分就别用分数。",
+    "result": "判据改为「matched === 0」后，噪声查询「12345678 xyzzyqqzz」立刻触发缺口记录（matched=0），真实查询「爬虫被封 IP 了」不触发（matched>0）。18 条断言全绿。同时把「分数阈值不可用」的结论写进 PRD 与代码注释，避免下一个人再踩。",
+    "retrospective": "阈值不是数值问题，是刻度问题。你只有在知道「100 是怎么算出来的」之后，才有资格说「小于 50 算低」。归一化分数的 100 不代表「完美匹配」，只代表「我是这批里最高的」——它衡量的是排序位置，不是匹配质量。凡是「相对」的量，都不能拿来当绝对阈值。更一般地：当两个分布（噪声 vs 真实）在可用特征上重叠时，调阈值永远解决不了，只能换一个能把它们分开的特征——这里换成了命中计数这个结构性事实。",
+    "harness": "mcp/server.js 的 search_recipes 返回体 + tests/gap-hint.test.js",
+    "verified": true,
+    "status": "published",
+    "confidence": "B",
+    "contributor_id": "anon-47856d",
+    "created_at": "2026-10-08"
+  },
+  {
     "id": "recipe-pj-guess-as-conclusion",
     "title": "把拍脑袋的估计当结论写进文档 —— 20 分钟能测出来的数，用「大概」代替",
     "tags": [
@@ -1714,6 +1756,47 @@
     "contributor_id": "anon-2f183a"
   },
   {
+    "id": "recipe-shell-backtick-eats-doc-text",
+    "title": "在 bash 里写含反引号的文档：反引号被当命令替换执行，文字被静默吃成空白",
+    "tags": [
+      "shell",
+      "bash",
+      "文档",
+      "静默失败"
+    ],
+    "model": "Git Bash / python -c 与 heredoc 两种写法都中招",
+    "problem": "用 shell 往 Markdown 里补一行约束，内容是「返回体里的 `contribute` 字段就是给你的信号」。执行没报错，但落盘的文档里那段变成了「返回体里的  字段就是给你的信号」——反引号连同里面的 contribute 一起被 shell 当成命令替换执行掉，替换成了空字符串。文档还是合法的 Markdown，语法检查过、链路全绿，只有人读的时候才发现中间空了一块。",
+    "dead_ends": [
+      {
+        "attempt": "用 python -c \"...向文件写入含 `submit_recipe` 的 Markdown...",
+        "failure": "双引号内反引号仍参与命令替换，shell 先执行被反引号包住的内容拿到空输出再交给 python。终端还多打了一行 contribute: command not found，我以为只是噪声，其实是证据。",
+        "duration": "直到通读文档才发现，约 15 分钟",
+        "early_signal": "终端里冒出「xxx: command not found」而你压根没想执行任何命令——那不是噪声，那是你的文字被执行了"
+      },
+      {
+        "attempt": "以为换成 quoted heredoc 就安全了，因为 quoted heredoc 不做参数展开",
+        "failure": "quoted heredoc 确实不展开 $ 变量，但命令替换在 heredoc 里的行为取决于调用形式（管道给解释器、-c 参数、未加引号的定界符）；一旦外层还有双引号包裹的 -c，反引号照样生效。不能凭「我用了 quoted heredoc」就断定安全。",
+        "duration": "排查时反复确认，约 10 分钟",
+        "early_signal": "你正在用「我记得这个语法是安全的」来判断，而不是用一次读回来核对"
+      },
+      {
+        "attempt": "事后用正则去修已经落盘的空档（搜「返回体里的  字段」）",
+        "failure": "能修，但这是补丁。根因是写入通道不安全，下一次写任何含反引号的文档还会再犯——包括代码块、shell 命令示例、正则、模板字符串，凡是反引号密集的内容都在射程内。",
+        "duration": "5 分钟修好，但没解决复发",
+        "early_signal": "修的是产物而不是通道"
+      }
+    ],
+    "solution": "① 含反引号的内容一律走文件写入工具，绝不经过 shell 命令行。写文件工具传的是字符串，不经过 shell 解析，反引号、$、引号全部原样落地。② 如果只能走 shell，用单引号包住整段（单引号内命令替换完全失效），且单引号内不能再出现单引号。③ 写完之后必须读回来核对，尤其是反引号密集的段落——这类失败是静默的，没有任何异常会告诉你文字少了。④ 看到终端出现「xxx: command not found」而你没打算执行命令时，立刻停下去查刚写入的文件。",
+    "result": "改用写文件工具后，contribute 反引号段一次落盘正确，回读核对一致。后续所有含反引号的文档（含 PRD、AGENT_PROMPT、配方正文）统一走文件写入，未再复发。",
+    "retrospective": "这条坑和「引号把脚本绞碎」是两类不同的事：那种是报错（脚本跑不起来，你立刻知道），这种是静默（文档写成功了，内容少了一块，语法依然合法）。静默失败最贵，因为它能通过所有自动化检查，只有人眼能发现——而人通常不会逐字重读自己刚写的东西。判断标准很简单：会不会报错。会报错的坑可以事后修；不会报错的坑必须在通道层杜绝。",
+    "harness": "WorkBuddy 的写文件工具 vs bash",
+    "verified": true,
+    "status": "published",
+    "confidence": "B",
+    "contributor_id": "anon-47856d",
+    "created_at": "2026-10-08"
+  },
+  {
     "id": "recipe-shell-heredoc-quoting",
     "title": "bash heredoc 里的嵌套引号会把脚本绞碎",
     "tags": [
@@ -1795,6 +1878,54 @@
     "confidence": "A",
     "contributor_id": "anon-602c63",
     "created_at": "2026-10-01"
+  },
+  {
+    "id": "recipe-test-suite-growth-three-traps",
+    "title": "给既有测试体系加东西会连撞三堵墙：写死的计数、不注册的套件、以及会拦住你自己的护栏",
+    "tags": [
+      "测试",
+      "CI",
+      "回归",
+      "护栏",
+      "工程纪律"
+    ],
+    "model": "Node 22 / tests/run-all.js + tests/mcp-smoke.js + tests/write-mcp.test.js",
+    "problem": "往一个跑得全绿的测试体系里加一个只读工具，一次改动连带撞出三类失败，且三类症状完全不同：① 断言里写死的「工具数 === 5」两处同时红；② 新建的测试文件根本没被跑（总计仍显示 9/9 文件），绿是假的；③ 刚加的 appendFileSync 触发了「Server 自身不直接写文件」这条护栏断言，自己把自己拦下。三者都发生在「新增了东西」之后，但根因互不相关。",
+    "dead_ends": [
+      {
+        "attempt": "断言里写死「只读工具恰好 5 个」",
+        "failure": "任何一次正常的工具新增都会让它变红。它测的其实是「库当前有 5 个工具」这个瞬时状态，却伪装成一个不变量。",
+        "duration": "加第 6 个只读工具后立刻红，两处",
+        "early_signal": "断言形如 length === N，而 N 是数出来的不是推出来的"
+      },
+      {
+        "attempt": "新建 tests/gap-hint.test.js 后直接跑 npm test，看到全绿就认为新测试生效了",
+        "failure": "汇总脚本用的是显式 SUITES 列表，不在清单里的文件不会被收集——它压根没跑。9/9 文件全绿里，新文件一条断言都没执行。",
+        "duration": "直到核对「总计」与「文件数」才发现差一个",
+        "early_signal": "新增文件后，总计断言数一点没变——这是唯一可靠的信号"
+      },
+      {
+        "attempt": "护栏断言写成「源码里不得出现 writeFile/writeFileSync/appendFile/unlink/rmSync」，而缺口日志确实用了 appendFileSync",
+        "failure": "护栏的本意是「禁止覆盖式/删除式写」，但它用的是「字符串黑名单」这种过宽的近似，把合法的追加写也一起禁了。它拦住了本次实现，属于护栏太宽，不是实现越界。",
+        "duration": "3 条失败中的 1 条",
+        "early_signal": "一条断言用 OR 串起五六个关键词，命中范围远大于它想保护的那件事"
+      },
+      {
+        "attempt": "（想都没想就准备做的）把 appendFileSync 加进白名单、或把护栏正则放松一点，让它过",
+        "failure": "这是绕过护栏而不是收窄护栏。放过一次之后，后面任何覆盖式写都能借同一个口子进来，护栏名存实亡。",
+        "duration": "在动手前自查拦下",
+        "early_signal": "你的修改让断言「更容易通过」而不是「更精确」——方向反了"
+      }
+    ],
+    "solution": "① 计数类断言能算就别写死：工具数改成先取列表再断言「包含预期的、不含禁止的」，或者干脆断言性质（不含写工具）而非数量。真的要写死 N，就在旁边注明「新增工具时需同步」。② 新增测试文件后，第一步是注册进汇总清单，第二步是跑完核对总计是否变大——总计没变就是没跑，别看「全绿」就收工。③ 护栏断言要收窄而不是绕过：这里拆成两条——「禁止 writeFileSync/unlink/rmSync（覆盖式与删除式写）」＋「全文件 appendFileSync 只允许出现 1 次，且必须指向 gaps.jsonl」。护栏因此更精确了，而不是更松了。④ 把「加东西之后要看总计变化」这条写成纪律，而不是靠记忆。",
+    "result": "三类失败各自修完后：总计从 301/3 变成 323/0（10/10 文件），且新套件的 18 条断言确认真的被执行。护栏拆条后仍能拦住真正的覆盖式写，同时放行受控的追加日志。",
+    "retrospective": "测试体系不是背景板，它是会被你的改动激活的参与者。加东西时它有三种反应，取决于你碰到了它的哪一层：写死的数字（数据层）、显式清单（收集层）、过宽的正则（约束层）。最危险的是第二种——它不报错，它只是安静地不跑，让你以为自己被测过了。第三条还有个通用教训：护栏拦住你的时候，先判断是护栏太宽还是你真的越界；太宽就收窄它，越界就改你的实现，唯独不能放松它。",
+    "harness": "npm test（tests/run-all.js 汇总）",
+    "verified": true,
+    "status": "published",
+    "confidence": "B",
+    "contributor_id": "anon-47856d",
+    "created_at": "2026-10-08"
   },
   {
     "id": "recipe-tmp-gitbash-vs-windows-python",
@@ -2733,6 +2864,48 @@
     "status": "published",
     "seed": true,
     "contributor_id": "anon-2f183a"
+  },
+  {
+    "id": "recipe-write-path-not-redirected-in-tests",
+    "title": "验证会写盘的功能时忘了重定向写入路径：探针把运行期日志写进真实仓库（untracked，git add -A 就带走）",
+    "tags": [
+      "测试",
+      "写路径",
+      "运行期产物",
+      "git",
+      "隐私"
+    ],
+    "model": "Node 22 / mcp/server.js 缺口日志 + tests/gap-hint.test.js",
+    "problem": "给 MCP 加缺口日志后，为了验证判据对不对，手动 spawn 服务打探针发了几条查询。测试套件本身已经用临时目录隔离了，但探针用的是默认数据路径——于是探针的查询被写进了真实仓库的 api/gaps.jsonl（2 行），其中一行是在旧的错误判据下产生的（matched=13 却记为缺口）。更麻烦的是它是 untracked 文件，git status 里静静躺着，一次 git add -A 就能带进提交。",
+    "dead_ends": [
+      {
+        "attempt": "测试套件已经用 mkdtempSync 隔离了，所以认为整条链路都不会碰真实仓库",
+        "failure": "隔离只覆盖了自动化测试这一条路径。手动探针、REPL 调试、临时脚本走的都是默认数据路径，写盘照样落到真实仓库。隔离做在了测试里，没做在功能本身上。",
+        "duration": "提交前 git status 才发现多了一个 untracked 文件",
+        "early_signal": "你心里记着「这个功能有隔离」，于是放松了对其他入口的检查"
+      },
+      {
+        "attempt": "觉得写进去也没关系，因为日志只存 hash 和长度，不存查询原文",
+        "failure": "默认配置下确实不存原文，但功能留了 RECIPE_GAP_LOG_RAW=1 开关（存打码后的样本）。开关一旦被别人打开，写进仓库的就是用户真实输入。而且即便只有 hash，运行期产物本身也不属于代码仓库——它会无限增长，每次跑都不一样，提交上去就是噪音。",
+        "duration": "设计复核时想到",
+        "early_signal": "用「现在的内容安全」论证「进仓库没问题」——内容会变，位置不会变"
+      },
+      {
+        "attempt": "手动删掉那个文件就完事",
+        "failure": "删掉只是清掉这一次的结果。下一次任何人打探针、跑调试脚本，它还会再长出来，而且还是 untracked——同样会被 git add -A 带走。修的是产物，不是路径。",
+        "duration": "删完就意识到",
+        "early_signal": "你的修复不改变「它会不会再次产生」"
+      }
+    ],
+    "solution": "① 会写盘的功能在验证前先重定向写入路径：新建临时目录、把库复制过去、用环境变量把读写路径指过去，验证完连目录一起删。测试、探针、调试脚本三种入口都要这么做，不能只做测试那一种。② 运行期日志一律进 .gitignore，并在注释里写明「运行期产物，不入库」，防止 git add -A 带走。③ 提交前必看 git status 的 untracked 段——新功能第一次跑完，最容易多出来的就是这类文件。④ 更进一步：把「日志写到哪」做成可配置项而不是硬编码路径，让调用方自己决定落在哪，默认落在数据目录旁边（那里本来就不该进库）。",
+    "result": "api/gaps.jsonl 确认无原文泄露（只有 ts / query_hash / query_len / matched / top_match_pct / tags），隐私设计生效；但把它加入 .gitignore 并清掉残留，避免作为运行期产物进库。测试用例全程走临时目录，未再污染真实仓库。",
+    "retrospective": "「测试隔离了」和「功能不会污染仓库」是两件事。前者只管住了一条入口，后者才是属性。凡是会写盘的功能，都要问一句：除了测试，还有谁会调用它？手动探针、调试脚本、同事的一次随手运行——这些都是没被隔离的入口。另外 untracked 文件是最容易漏的一类提交：它不出现在 git diff 里，只有 git status 看得见，而很多人提交前只看 diff。新功能第一次跑完，先跑一次 git status。",
+    "harness": "tests/gap-hint.test.js 的 mkdtempSync 隔离 + .gitignore",
+    "verified": true,
+    "status": "published",
+    "confidence": "B",
+    "contributor_id": "anon-47856d",
+    "created_at": "2026-10-08"
   },
   {
     "id": "recipe-yaml-frontmatter-colon",

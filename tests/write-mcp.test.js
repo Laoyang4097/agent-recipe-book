@@ -403,8 +403,8 @@ try {
   // 读工具数随功能演进（BL-014 加了 verify_citations，故由 4 变 5）；
   // 这条断言真正守的是「写工具绝不在未开启时出现」，故显式断言两个写工具都不在。
   check(
-    "B-4 默认.tools/list 只有 5 个读工具",
-    names.length === 5 && !names.includes("submit_recipe") && !names.includes("promote_recipe"),
+    "B-4 默认.tools/list 只有 6 个读工具（多出来的 gap_report 也是只读）",
+    names.length === 6 && !names.includes("submit_recipe") && !names.includes("promote_recipe") && names.includes("gap_report"),
     JSON.stringify(names)
   );
   check(

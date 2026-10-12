@@ -21,6 +21,11 @@ desktop.ini
 *.log
 npm-debug.log*
 
+# 运行期产物（不入库）
+# 缺口日志由 MCP Server 在本地数据目录旁边累积：随运行增长、每次内容不同；
+# 且 RECIPE_GAP_LOG_RAW=1 时会含打码后的查询样本。留本地即可，别用 git add -A 带走。
+api/gaps.jsonl
+
 # 编辑器
 .vscode/
 .idea/

@@ -117,8 +117,8 @@ try {
   section("二、工具列表");
   console.log("      工具:", tools.map((t) => t.name).join(" / "));
   check(
-    "返回 5 个工具（含 list_quarantine / verify_citations）",
-    tools.length === 5,
+    "返回 6 个工具（含 list_quarantine / verify_citations / gap_report）",
+    tools.length === 6,
     `实际 ${tools.length}`
   );
   check(
@@ -453,12 +453,33 @@ try {
      把这条写死在这里，是为了防止有人图省事用 fs 写文件绕开内核。 */
   const src = (await import("node:fs")).readFileSync(join(ROOT, "mcp", "server.js"), "utf8");
   check(
-    "Server 自身不直接写 recipes/*.md（一律经 ingest.py 子进程）",
-    !/writeFile|writeFileSync|appendFile|unlink|rmSync/.test(src)
+    "Server 自身不做覆盖式 / 删除式写（一律经 ingest.py 子进程）",
+    !/writeFileSync|unlink|rmSync/.test(src)
+  );
+  check(
+    "唯一的追加写只允许指向缺口日志 gaps.jsonl（绝不碰库文件）",
+    (src.match(/appendFileSync\(/g) || []).length === 1 && /gaps\.jsonl/.test(src)
   );
   check(
     "写操作确实走 ingest.py 桥接（spawnSync + api/ingest.py）",
     /spawnSync/.test(src) && /api\/ingest\.py/.test(src)
+  );
+
+  /* 回归（2026-10-08）：C-7「要投稿」是写侧触发的第一道信号，而它有两份同源文本
+     —— prompts/get 的 GUIDE_MANUAL 与 mcp/AGENT_PROMPT.md。改一处漏一处，
+     Agent 就根本不知道要投稿，写侧触发率还是 0，且**不会报错**（静默失效）。
+     这里不比对全文措辞，只比对「硬约束编号集合」必须一致。 */
+  const fsMod = await import("node:fs");
+  const agentPrompt = fsMod.readFileSync(join(ROOT, "mcp", "AGENT_PROMPT.md"), "utf8");
+  const cNums = (t) => [...new Set(t.match(/C-\d/g) || [])].sort().join(",");
+  check(
+    "prompts/get 手册与 AGENT_PROMPT.md 的硬约束编号同源一致（漏改一处会静默失效）",
+    cNums(src).length > 0 && cNums(src) === cNums(agentPrompt),
+    `js=[${cNums(src)}] md=[${cNums(agentPrompt)}]`
+  );
+  check(
+    "两份同源文本都含 C-7 要投稿",
+    /C-7/.test(src) && /C-7/.test(agentPrompt)
   );
 
   /* ---------------- BL-014 引用校验闸门 ---------------- */

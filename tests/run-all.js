@@ -40,6 +40,7 @@ const SUITES = [
   { name: "经验向导 prompts", args: ["tests/agent-prompts.test.js"] },
   { name: "写侧 MCP 端到端", args: ["tests/write-mcp.test.js"] },
   { name: "引用校验", args: ["tests/verify-citations.test.js"] },
+  { name: "缺口日志与投稿邀请", args: ["tests/gap-hint.test.js"] },
   { name: "投稿链路解析", args: ["tests/run-python.js", "tests/issue_to_recipe.test.py"] },
   { name: "写侧内核回归", args: ["tests/run-python.js", "tests/ingest_write.test.py"] },
 ];

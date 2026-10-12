@@ -21,7 +21,9 @@
    ⚠️ stdout 只允许出现协议报文；一切日志走 stderr（否则会污染协议流）。
    ============================================================ */
 
-import { readFileSync, statSync } from "node:fs";
+import { readFileSync, statSync, appendFileSync, existsSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
@@ -57,6 +59,104 @@ const DATA_PATH =
    默认关闭——现有的只读客户端与测试路径完全不受影响；
    只有显式设 RECIPE_BOOK_WRITE=1，写工具才会出现在 tools/list 里。 */
 const WRITE_ENABLED = process.env.RECIPE_BOOK_WRITE === "1";
+
+/* ---------------- 缺口日志（未命中留痕）----------------
+   MCP 是请求-响应模型，服务端看不到对话，无法自动判断 AI 刚绕了几轮；
+   「检索未命中」是服务端唯一亲眼目睹的「库里缺这一页」的证据，所以只抓这个信号。
+   三条底线：① 只存 hash + 长度 + 分数，**绝不存查询原文**（防患者信息 / 内网路径入库）；
+   ② RECIPE_GAP_LOG=0 可整体关闭；③ RECIPE_GAP_LOG_RAW=1 才记原文（且先做打码）。
+   落盘与库同根，不上传、不进公开索引、不进 Pages。 */
+const GAP_LOG_ENABLED = process.env.RECIPE_GAP_LOG !== "0";
+const GAP_LOG_RAW = process.env.RECIPE_GAP_LOG_RAW === "1";
+const GAP_LOG_DEDUPE_MS = 24 * 60 * 60 * 1000;
+const GAP_LOG_MAX_BYTES = Number(process.env.RECIPE_GAP_LOG_MAX_BYTES || 2000000);
+/* 分数阈值默认关闭（理由见下方 BL-021 注释）：只有显式设 RECIPE_MISS_SCORE=n 才启用。 */
+const MISS_SCORE = process.env.RECIPE_MISS_SCORE ? Number(process.env.RECIPE_MISS_SCORE) : null;
+
+function gapLogPath() {
+  return join(dirname(DATA_PATH), "gaps.jsonl");
+}
+
+function hashQuery(q) {
+  return createHash("sha256").update(String(q == null ? "" : q), "utf8").digest("hex").slice(0, 12);
+}
+
+/* RAW 模式的轻量打码：连续 6 位以上数字（病历号 / 电话一类）、绝对路径、IP、邮箱。
+   注意这是 best-effort，不等于写侧 scan_sensitive 的同源复检；
+   所以 RAW 只用于本机排查，日志不共享、不上传。 */
+function scrubForGap(text) {
+  return String(text == null ? "" : text)
+    .replace(/\b\d{6,}\b/g, "<num>")
+    .replace(/[A-Za-z]:\\[^\s"']*/g, "<path>")
+    .replace(/\/(?:Users|home|root|var|opt|data)\/[^\s"']*/g, "<path>")
+    .replace(/\b\d{1,3}(?:\.\d{1,3}){3}\b/g, "<ip>")
+    .replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, "<email>")
+    .slice(0, 60);
+}
+
+function readGapLines() {
+  const p = gapLogPath();
+  if (!existsSync(p)) return [];
+  try {
+    return readFileSync(p, "utf8").split("\n").filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function recordGap(entry) {
+  if (!GAP_LOG_ENABLED) return { recorded: false, reason: "disabled" };
+  const p = gapLogPath();
+  try {
+    if (existsSync(p) && statSync(p).size > GAP_LOG_MAX_BYTES) return { recorded: false, reason: "size_cap" };
+    const prev = readGapLines()
+      .map((l) => { try { return JSON.parse(l); } catch { return null; } })
+      .filter((e) => e && e.query_hash === entry.query_hash)
+      .map((e) => Date.parse(e.ts) || 0)
+      .sort((a, b) => b - a)[0] || 0;
+    if (prev && Date.now() - prev < GAP_LOG_DEDUPE_MS) return { recorded: false, reason: "deduped" };
+    appendFileSync(p, JSON.stringify(entry) + "\n", "utf8");
+    return { recorded: true };
+  } catch {
+    return { recorded: false, reason: "io_error" };
+  }
+}
+
+function toolGapReport(args) {
+  const raw = args?.limit;
+  const limit = Number.isInteger(raw) && raw > 0 && raw <= 50 ? raw : 10;
+  const lines = readGapLines();
+  const agg = new Map();
+  for (const line of lines) {
+    let e = null;
+    try { e = JSON.parse(line); } catch { continue; }
+    if (!e || !e.query_hash) continue;
+    const cur = agg.get(e.query_hash) || {
+      query_hash: e.query_hash, count: 0, last_ts: "",
+      query_len: e.query_len || 0, top_match_pct: e.top_match_pct || 0,
+    };
+    cur.count += 1;
+    if (String(e.ts || "") > String(cur.last_ts || "")) {
+      cur.last_ts = e.ts || "";
+      cur.query_len = e.query_len || cur.query_len;
+      cur.top_match_pct = e.top_match_pct || 0;
+    }
+    agg.set(e.query_hash, cur);
+  }
+  const items = [...agg.values()]
+    .sort((a, b) => b.count - a.count || String(b.last_ts).localeCompare(String(a.last_ts)))
+    .slice(0, limit);
+  return textResult({
+    total_records: lines.length,
+    unique_gaps: agg.size,
+    logging_enabled: GAP_LOG_ENABLED,
+    has_query_text: GAP_LOG_RAW,
+    note:
+      "默认只存 hash + 长度 + 分数，不含查询原文；想知道具体缺什么，需自行对照本机调用日志，" +
+      "或用 RECIPE_GAP_LOG_RAW=1 开启本机原文记录（会先打码）。",
+    items,
+  });
+}
 
 /* ---------------- 与写侧内核的桥接 ----------------
    校验、渲染、脱敏、晋升门槛全在 api/ingest.py，这里只做两件事：
@@ -266,6 +366,42 @@ function toolSearchRecipes(args) {
   // BL-014：verify:true 时附带「可引用白名单」，调用方据此用 verify_citations 复核引用
   if (verify) payload.citable_ids = res.results.map((r) => r.recipe.id);
   if (res.hint) payload.hint = res.hint;
+  /* BL-021 未命中判定：默认只认 matched===0 这一个无歧义信号。
+     实测（2026-10-13）两条反直觉的事实，都记在这儿防止后人再踩：
+     ① matchPct 是「相对 Top1 的归一化」，Top1 恒为 100%，拿它设阈值**永远不触发**；
+     ② raw score 分不开噪声与真实查询——噪声「qqzz 完全不存在的主题」Top1=6，
+        而真实查询「爬虫被封 IP 了」Top1 同样是 6。
+     所以：默认只认零命中；分数阈值作为可选开关，启用就要接受噪声。 */
+  const topScore = res.results.length ? Number(res.results[0].score || 0) : 0;
+  const topPct = res.results.length ? Number(res.results[0].matchPct || 0) : 0;
+  const isMiss = res.matched === 0 || (MISS_SCORE !== null && topScore < MISS_SCORE);
+  if (isMiss) {
+    if (WRITE_ENABLED) {
+      payload.contribute = {
+        kind: "miss",
+        message:
+          "库里没有直接对得上的经验——这恰恰是库最缺的东西。如果你刚把这个问题解决了，" +
+          "可以用 submit_recipe 记一条（写清试过什么、为什么失败、最后成了什么），" +
+          "它会进隔离池等人复核：一个人的坑写一次，后面所有人都绕得开。",
+        suggested_tool: "submit_recipe",
+      };
+    }
+    const rec = recordGap({
+      ts: new Date().toISOString(),
+      query_hash: hashQuery(query),
+      query_len: String(query || "").length,
+      matched: res.matched,
+      top_match_pct: topPct,
+      top_score: topScore,
+      tags: tags || [],
+      ...(GAP_LOG_RAW ? { query_sample: scrubForGap(query) } : {}),
+    });
+    payload.gap = {
+      recorded: rec.recorded,
+      reason: rec.reason || null,
+      query_hash: hashQuery(query),
+    };
+  }
   return textResult(payload);
 }
 
@@ -528,6 +664,19 @@ const READ_TOOLS = [
     },
     run: toolVerifyCitations,
   },
+  {
+    name: "gap_report",
+    description:
+      "列出「有人问过、但库里没有」的查询缺口，按被问次数排序，用来决定下一批该写哪些配方。" +
+      "数据来自本机 api/gaps.jsonl（与库同根，不上传）。默认只存 hash 与分数，不含查询原文。",
+    inputSchema: {
+      type: "object",
+      properties: {
+        limit: { type: "integer", minimum: 1, maximum: 50, description: "返回条数，默认 10" },
+      },
+    },
+    run: toolGapReport,
+  },
 ];
 
 /* 写侧工具。只在 RECIPE_BOOK_WRITE=1 时挂进 tools/list——默认不给。
@@ -638,8 +787,10 @@ const GUIDE_MANUAL = `你是「解题配方库」的**经验向导**，专门帮
 - C-4 不猜测：候选不足以回答时，明确说「库内没有直接匹配的经验」，并建议换更具体的说法或查 list_tags，**不猜**。
 - C-5 给死胡同：回答中必须至少包含 1 条「死胡同提醒」（某条配方的 dead_ends：试过什么 / 结果如何 / 卡了多久），帮用户少走弯路。
 - C-6 附声明：回答末尾固定附加一句：「以上为库内经验，非官方认定；以你自己的真实场景为准」。
+- C-7 要投稿：帮用户解决完卡点后**必须主动提议**用 submit_recipe 把这条经验记进库（尤其是检索未命中、靠推理解决的情况）；用户同意后再提交。理由：库里每一条都是这么攒出来的，不提议 = 下一个人还得重新踩一遍。
 
 # 降级（必须做到）
+- 检索返回空、而你随后把问题解决了：除 C-4 外还要按 **C-7** 主动提议投稿（返回体里的 contribute 字段就是给你的信号）。
 - 检索返回空：走 C-4 话术，**不编造**，直接如实告知用户库里没有。
 - 检索有结果但都很弱：也只允许引用这些弱结果，不得自行发挥，并说明「匹配度不高，仅供参考」。
 
@@ -686,7 +837,8 @@ function handleInitialize(id, params) {
       "无命中时如实告诉用户「库里没有」，不要用你自己的知识补答案——" +
       "本库的价值在于「别人真的踩过什么坑」，编造会毁掉它。引用时请带上配方 id，便于用户核对。" +
       (WRITE_ENABLED
-        ? " 写入仅限已开启写入的那位用户：submit_recipe 提交后进隔离池等人复核，人点头才公开。"
+        ? " 写入仅限已开启写入的那位用户：submit_recipe 提交后进隔离池等人复核，人点头才公开。" +
+          " 检索未命中时返回体带 contribute 字段——那说明库里缺这一页，请转告用户可以把这次的坑记下来。"
         : ""),
   });
 }

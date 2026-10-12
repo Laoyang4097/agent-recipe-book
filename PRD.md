@@ -121,7 +121,7 @@
 4. **F-04 机器可读接口**：自动生成 `/llms.txt`（索引）+ `/api/experiences.json`（全量正文），每次新投稿重写。<br>✅ **已交付**：`rebuild` 幂等零漂移；线上三条链接（首页 / JSON / `llms.txt`）均 200。
 5. **F-05 演示 Agent「经验向导」**：用 **WorkBuddy** 搭建，学生口述卡点 → 检索本库(llms.txt/JSON) → 返回破局法 + 死胡同提醒。<br>✅ **已实现并升级**：实际交付为「MCP 内置 prompts（`experience-guide`）+ `mcp/AGENT_PROMPT.md` 纯文本兜底」，实现"任意接入的 Agent 一连即自动上岗"。细化规格见 v1.2 §7。
 6. **F-06 贡献者表彰**：展示贡献次数/致谢榜（借鉴清华"清小搭"永久表彰模式，按 Agent/匿名标识计）。<br>⏸ **本期不做**：与"能被调用"主线无关（v1.2 §3 非目标）。
-7. **F-10 只读 MCP Server**：让 Agent 以 MCP 协议查询本库。<br>⬆️ **已从 P2 提升为 P0**（原判"非必需"被推翻，见 v1.2 §1.1 LLM Agent 是反应式的、不会主动"想起"来读本库；`llms.txt` 只解决"能被读"，MCP 解决"会被调用"）。<br>✅ **已实现**：`mcp/server.js`，5 个只读工具（search_recipes / get_recipe / list_tags / list_quarantine / verify_citations）。
+7. **F-10 只读 MCP Server**：让 Agent 以 MCP 协议查询本库。<br>⬆️ **已从 P2 提升为 P0**（原判"非必需"被推翻，见 v1.2 §1.1 LLM Agent 是反应式的、不会主动"想起"来读本库；`llms.txt` 只解决"能被读"，MCP 解决"会被调用"）。<br>✅ **已实现**：`mcp/server.js`，**6 个只读工具**（search_recipes / get_recipe / list_tags / list_quarantine / verify_citations / **gap_report**）。<br>🆕 **2026-10-13 增 gap_report**（BL-021）：列「有人问过、库里没有」的查询缺口，见 §8.4。
 
 ### P1（后一阶段交付前，增强体验）
 8. **F-07 主动惊喜推送**：**后续再说**（暂缓，不在 MVP 范围；待核心闭环验证后再评估是否加入）。
@@ -198,6 +198,7 @@
 | `get_recipe` | `id` | 单条配方全文 | 按 id 精确取 |
 | `list_tags` | 无 | 可用分组与标签 | 供上层做筛选器 |
 | `list_quarantine` | `query?`（可选，给隔离项按匹配度排序） | C 级隔离项清单 | 审计视图，供人工复核；**只读，不提供放行操作**（放行由人在库侧完成） |
+| `gap_report` | `limit?`（1–50，默认 10） | `total_records` / `unique_gaps` / `items[]` | BL-021：读本机 `gaps.jsonl`，列查询缺口，用来决定下一批写什么配方 |
 | `verify_citations` | `answer`（必填）、`allowedIds`（数组） | `ok` / `cited` / `badIds` | **§8.3「防编造护栏」的运行时闸门**（BL-014）：纯字符串比对、零 LLM 参与，用来自查答案里的 `[recipe-xxx]` 引用是否越出 `citable_ids` |
 
 外加 `prompts/get(experience-guide)`：把「经验向导」的规矩固化进 server，**接入方不带任何自定义 Prompt 也能自动上岗**；`mcp/AGENT_PROMPT.md` 为纯文本兜底。
@@ -211,7 +212,24 @@
   > 该库自 2026-09-27 起有实现、有测试，但**当时没有接进任何运行时路径**（"有库无闸门"，登记为 BL-014）。
   > **2026-10-01 已接上**：`search_recipes` 的 `verify: true` 返回 `citable_ids`，配套只读工具 `verify_citations`
   > 让调用方在交出答案前自查。至此这条护栏从"库里有"变成"链路上有"。
-- **分页**：`offset`（默认 0，上限 40，超限返回 JSON-RPC `-32602`）+ `limit`，返回 `has_more`。
+### 8.4 缺口日志与投稿邀请（BL-021，2026-10-13）
+
+**为什么有这一节**：写侧 `submit_recipe` 长期没有任何触发器——`AGENT_PROMPT.md` 通篇只讲"怎么查"，
+未命中时返回体也不给投稿提示，于是**库增长全靠作者自己记得投稿**，这是"配方只有 66 条"的机制性原因。
+
+**能做的与不能做的**（先说清楚边界）：MCP 是请求-响应模型，服务端看不到对话，
+无法自动判断 AI 刚绕了几轮；**「检索未命中」是服务端唯一亲眼目睹的信号**，所以只抓这个。
+
+- **投稿邀请**：未命中且写侧开启时，返回体多带 `contribute`（`suggested_tool: submit_recipe`）。只读部署下不给，避免诱导写操作。
+- **缺口日志**：未命中时追加一行到 `api/gaps.jsonl`（与库同根）。默认开启，`RECIPE_GAP_LOG=0` 关闭；
+  **只存 `query_hash`(sha256 前 12) + 长度 + 分数，绝不存查询原文**（医院场景第一防线）；
+  同 hash **24h 去重**；`RECIPE_GAP_LOG_RAW=1` 才记原文且先打码（best-effort，非写侧同源复检）。
+- **未命中判定的实测结论（重要）**：默认**只认 `matched === 0`**。
+  ① `matchPct` 是相对 Top1 的归一化，**Top1 恒为 100%**，拿它设阈值永远不触发；
+  ② `raw score` 分不开噪声与真实查询——噪声「qqzz 完全不存在的主题」Top1=6，真实查询「爬虫被封 IP 了」Top1 也是 6。
+  分数阈值作为可选开关 `RECIPE_MISS_SCORE=n`，启用即接受噪声。
+- **护栏收窄而非绕过**：原断言「Server 自身不直接写文件」拆成两条——
+  禁止覆盖式/删除式写；`appendFileSync` 全文件只允许出现 1 次且必须指向 `gaps.jsonl`。
 - **治理链四道闸门（2026-09-27 精确落点，已逐一核实）**：
 
   | 闸门 | 守在哪条路上 | 作用 |
