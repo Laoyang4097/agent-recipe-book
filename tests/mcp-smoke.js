@@ -621,6 +621,74 @@ function startServerWithEnv(env) {
   return state;
 }
 
+/* ---------------- BL-022 租户身份透明 ----------------
+   背景（2026-10-18 维护者反馈 §4.3）：三个 MCP 入口共用这一份 server.js，
+   只靠 RECIPE_BOOK_PATH 换库，而工具描述与返回体里都没有「我连的是哪个库」。
+   Agent 只能靠名字猜，实测把通用主库误认成 LifeLens 专用库，于是既没查也没写。
+   现在身份由服务端自己声明，这里守住「声明必须出现在可见的三个地方」。 */
+section("八、租户身份透明（BL-022）");
+/* 本节自己起实例，不复用上面的 s / tools：那段在 try 块作用域内，且此时主实例已停。 */
+try {
+  const sMain = startServerWithEnv({});
+  await sMain.call("initialize", { protocolVersion: "2024-11-05", capabilities: {} });
+  const tlMain = await sMain.call("tools/list", {});
+  const toolsMain = tlMain.result?.tools || [];
+  check(
+    "每个工具描述都带租户标识（当前库：xxx）",
+    toolsMain.length > 0 && toolsMain.every((t) => /（当前库：/.test(t.description || "")),
+    toolsMain.filter((t) => !/（当前库：/.test(t.description || "")).map((t) => t.name).join(",")
+  );
+  const bkS = await sMain.call("tools/call", {
+    name: "search_recipes",
+    arguments: { query: "乱码", limit: 1 },
+  });
+  const bkSPayload = JSON.parse(bkS.result.content[0].text);
+  check("search_recipes 返回体带 book=default", bkSPayload.book === "default",
+    `book=${bkSPayload.book}`);
+  const bkG = await sMain.call("tools/call", {
+    name: "get_recipe",
+    arguments: { id: "recipe-py-encoding-mojibake" },
+  });
+  const bkGPayload = JSON.parse(bkG.result.content[0].text);
+  check("get_recipe 返回体带 book=default", bkGPayload.book === "default",
+    `book=${bkGPayload.book}`);
+  sMain.stop();
+} catch (err) {
+  check("默认租户身份场景测试执行未抛异常", false, err.message);
+}
+
+/* 换一个租户起服务：证明 book 是算出来的，不是写死的 "default" */
+try {
+  const sLl = startServerWithEnv({
+    RECIPE_BOOK_PATH: join(ROOT, "books", "lifelens", "api", "experiences.json"),
+  });
+  const initLl = await sLl.call("initialize", {
+    protocolVersion: "2024-11-05",
+    capabilities: {},
+  });
+  check("第二租户（lifelens）服务可起", !initLl.error);
+  check(
+    "第二租户的 instructions 里声明的是 lifelens，不是 default",
+    /当前库：lifelens/.test(initLl.result?.instructions || "") &&
+      !/当前库：default/.test(initLl.result?.instructions || ""),
+    (initLl.result?.instructions || "").slice(0, 80)
+  );
+  const tl = await sLl.call("tools/list", {});
+  check(
+    "第二租户的工具描述也跟着变",
+    (tl.result?.tools || []).every((t) => /当前库：lifelens/.test(t.description || ""))
+  );
+  const rLl = await sLl.call("tools/call", {
+    name: "search_recipes",
+    arguments: { query: "Electron", limit: 1 },
+  });
+  const pLl = JSON.parse(rLl.result.content[0].text);
+  check("第二租户检索返回 book=lifelens", pLl.book === "lifelens", `book=${pLl.book}`);
+  sLl.stop();
+} catch (err) {
+  check("第二租户场景测试执行未抛异常", false, err.message);
+}
+
 /* ---------------- 汇总 ---------------- */
 done();
 console.log("\n✅ MCP Server 全部通过");

@@ -17,6 +17,7 @@
 import glob
 import hashlib
 import io
+import json
 import os
 import sys
 import tempfile
@@ -435,6 +436,45 @@ def t8_downgrade_confirm():
         pass
 
 
+# ---------------- 9. 内置 YAML 兜底解析器必须与 pyyaml 等价 ----------------
+def t9_miniyaml_parity():
+    print("\n[9] 兜底解析器（无 pyyaml 时用）与 pyyaml 逐条等价（2026-10-18 反馈 §4.6）")
+    # 兜底解析器的风险是「解析错了却不知道」——那正是 RT-G1 那类静默失败。
+    # 上线前已拿全库做过一次对等校验，这里把它固化成持续断言：
+    # 将来谁用了子集之外的写法（块标量 / 锚点 / 流样式），这条会当场变红。
+    if ingest.yaml is None:
+        check("T9 基准缺失（本机未装 pyyaml），无法比对", True, "跳过")
+        return
+    files = sorted(glob.glob(os.path.join(ingest.RECIPES_DIR, "*.md")))
+    same, bad = 0, []
+    for p in files:
+        text = io.open(p, encoding="utf-8").read()
+        if not text.startswith("---"):
+            continue
+        parts = text.split("---", 2)
+        if len(parts) < 3:
+            continue
+        try:
+            a = ingest.yaml.safe_load(parts[1])
+        except Exception:
+            continue  # pyyaml 自己都解析不了的不算兜底的锅
+        try:
+            b = ingest.mini_yaml_load(parts[1])
+        except Exception as e:
+            bad.append("%s: 兜底解析报错 %s" % (os.path.basename(p), e))
+            continue
+        # 归一化：pyyaml 把 2026-09-26 解成 date，兜底给字符串；落盘都是 default=str，等价
+        na = json.dumps(a, ensure_ascii=False, sort_keys=True, default=str)
+        nb = json.dumps(b, ensure_ascii=False, sort_keys=True, default=str)
+        if na == nb:
+            same += 1
+        else:
+            bad.append("%s: 结果不一致" % os.path.basename(p))
+    check("T9a 每条配方的兜底解析结果与 pyyaml 一致", not bad, "; ".join(bad[:3]))
+    check("T9b 覆盖面：参与比对的配方数与库内 .md 数一致",
+          same == len(files), "比对了 %d / %d" % (same, len(files)))
+
+
 if __name__ == "__main__":
     print("=== 写侧内核回归测试 ===")
     t1_sensitive_rules()
@@ -445,6 +485,7 @@ if __name__ == "__main__":
     t6_index_sync()
     t7_keep_unknown_fields()
     t8_downgrade_confirm()
+    t9_miniyaml_parity()
 
     if FAIL:
         print("\n失败清单：")

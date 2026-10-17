@@ -60,6 +60,30 @@ const DATA_PATH =
    只有显式设 RECIPE_BOOK_WRITE=1，写工具才会出现在 tools/list 里。 */
 const WRITE_ENABLED = process.env.RECIPE_BOOK_WRITE === "1";
 
+/* ---------------- 租户标识（BL-022 · 多租户身份透明）----------------
+   三份 MCP 入口（agent-recipe-book / lifelens-recipes / xhs）共用这一份 server.js，
+   只靠 RECIPE_BOOK_PATH 换库。此前工具描述与返回体里都没有「当前连的是哪个库」，
+   导致 Agent 靠名字猜——实测把通用主库误认成 LifeLens 专用库，于是压根没往里查也没往里写。
+   现在：身份由服务端自己声明，调用方不用猜、也不用去翻客户端配置。
+   可用 RECIPE_BOOK_ID 显式指定；否则从路径推断（books/<name>/... → <name>）。 */
+function deriveBookId() {
+  const p = process.env.RECIPE_BOOK_PATH;
+  if (!p) return "default";
+  const parts = String(p).replace(/\\/g, "/").split("/").filter(Boolean);
+  for (let i = parts.length - 2; i >= 0; i--) {
+    if (parts[i] === "books") return parts[i + 1] || "custom";
+  }
+  return "custom";
+}
+const BOOK_ID = process.env.RECIPE_BOOK_ID || deriveBookId();
+const BOOK_IS_DEFAULT = BOOK_ID === "default";
+/* 注意：BOOK_NOTE 里不要再重复写库名——调用方拼的是「当前库：<id>；<note>」，
+   重复一遍就成了「当前库：default；通用主库（default）」。 */
+const BOOK_NOTE = BOOK_IS_DEFAULT
+  ? "通用主库：跨项目通用的坑，任何项目都该先查、解卡后都欢迎投稿"
+  : `项目专属库：只收该项目的专属坑，通用坑请投 default 库`;
+const BOOK_TAG = `（当前库：${BOOK_ID} — ${BOOK_NOTE}）`;
+
 /* ---------------- 缺口日志（未命中留痕）----------------
    MCP 是请求-响应模型，服务端看不到对话，无法自动判断 AI 刚绕了几轮；
    「检索未命中」是服务端唯一亲眼目睹的「库里缺这一页」的证据，所以只抓这个信号。
@@ -337,6 +361,8 @@ function toolSearchRecipes(args) {
 
   const res = searchRecipes(data.recipes, query, { tags, limit, offset, includeQuarantine });
   const payload = {
+    // BL-022：返回体自带租户标识，调用方不必靠名字或配置文件去猜连的是哪个库
+    book: BOOK_ID,
     matched: res.matched,
     returned: res.returned,
     has_more: res.has_more,
@@ -412,8 +438,9 @@ function toolGetRecipe(args) {
   }
   const id = requireString(args, "id");
   const found = data.recipes.find((r) => r.id === id);
-  if (!found) return textResult({ error: "not_found", id, hint: HINT_NOT_FOUND });
-  return textResult(found);
+  if (!found) return textResult({ error: "not_found", id, book: BOOK_ID, hint: HINT_NOT_FOUND });
+  // BL-022：单条也带租户标识（同 id 在不同库里可能是两条完全不同的配方）
+  return textResult({ ...found, book: BOOK_ID });
 }
 
 function toolListTags() {
@@ -831,9 +858,18 @@ function handleInitialize(id, params) {
     capabilities: { tools: { listChanged: false }, prompts: { listChanged: false } },
     serverInfo: SERVER_INFO,
     instructions:
-      "解题配方库（只读" +
-      (WRITE_ENABLED ? "；写侧已开启" : "") +
-      "）。先用 search_recipes 检索；" +
+      /* BL-022：先把「我连的是哪个库」讲清楚。此前三个入口共用这份 server.js 却不声明身份，
+         Agent 靠名字猜，实测把通用主库误判成 LifeLens 专用库，于是压根没查也没写。 */
+      `解题配方库（当前库：${BOOK_ID}；${BOOK_NOTE}；` +
+      (WRITE_ENABLED ? "写侧已开启" : "只读模式") +
+      "）。两条规矩：① 遇到网页采集、编码乱码、反爬、限流、分页、无头浏览器、" +
+      "网站工程、工具链、评测方法论这类卡点，**动手前先用 search_recipes 查一次**——" +
+      "别人踩过的坑比从头试更省事；② 查不到、而你随后把问题解决了，" +
+      "回来用 submit_recipe 把这条坑记进库，让下一个人不必再踩一遍" +
+      (WRITE_ENABLED
+        ? ""
+        : "（当前连接是只读的：投稿需先开启 RECIPE_BOOK_WRITE=1 并重启会话）") +
+      "。完整行为手册可调 prompts/get（name='experience-guide'）取回。" +
       "无命中时如实告诉用户「库里没有」，不要用你自己的知识补答案——" +
       "本库的价值在于「别人真的踩过什么坑」，编造会毁掉它。引用时请带上配方 id，便于用户核对。" +
       (WRITE_ENABLED
@@ -859,7 +895,11 @@ function handleToolsList(id) {
   replyOk(id, {
     tools: TOOLS.map((t) => ({
       name: t.name,
-      description: typeof t.buildDescription === "function" ? t.buildDescription() : t.description,
+      /* BL-022：每个工具描述末尾统一带上租户标识。此前三个入口共用这份 server.js
+         却不声明身份，Agent 只能靠名字猜，实测把通用主库误认成 LifeLens 专用库。 */
+      description:
+        (typeof t.buildDescription === "function" ? t.buildDescription() : t.description) +
+        BOOK_TAG,
       inputSchema: t.inputSchema,
     })),
   });

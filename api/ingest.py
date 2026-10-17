@@ -166,7 +166,10 @@ def render_md(payload: dict) -> str:
     frontmatter 用 yaml.safe_dump 生成，保证含冒号/引号的值也能正确往返解析
     （手拼字符串会在 failure 含 'xxx: yyy' 时破坏 YAML）。"""
     if yaml is None:
-        sys.exit("❌ 未安装 pyyaml，无法安全渲染 frontmatter。请先 pip install pyyaml。")
+        # 只做解析的兜底（mini_yaml_load），**生成** YAML 没有兜底实现——
+        # 手拼 frontmatter 会在值里含冒号/引号时崩，风险太大，宁可要求装 pyyaml。
+        sys.exit("❌ 未安装 pyyaml，无法安全渲染 frontmatter。"
+                 "检索与 rebuild 可用内置解析器兜底，但投稿渲染仍需先 pip install pyyaml。")
     p = dict(payload)
     # 系统填充
     if "created_at" not in p:
@@ -590,14 +593,25 @@ def ingest(json_path: str):
         print("❌ 渲染出的 frontmatter 无法被 YAML 解析，已回滚该文件。请检查字段取值。")
         sys.exit(1)
     print(f"✅ 已写入 {md_path}")
-    rebuild()
+    # rebuild 现在会因坏 .md 失败（RT-G1）。此时配方已落盘但索引是旧的 ——
+    # 必须把这个「半成品状态」讲清楚，不能让投稿方以为自己写进库了。
+    rc = rebuild()
+    if rc != 0:
+        print(f"⚠️ 配方已落盘 {md_path}，但索引重建失败（退出码 {rc}）。")
+        print("   索引仍是重建前的旧版本，本条暂时检索不到。")
+        print("   请修复上面列出的坏文件后重跑：python api/ingest.py rebuild")
+        sys.exit(rc)
 
 
-def rebuild():
-    if yaml is None:
-        print("⚠️ 未安装 pyyaml，无法解析现有 .md frontmatter。"
-              "请 `pip install pyyaml` 后重试 rebuild。")
-        return
+def rebuild(allow_skip=False):
+    """重建 experiences.json 与 llms.txt。返回退出码（0 成功，非 0 失败）。
+
+    RT-G1（2026-10-18 依维护者反馈修复）：旧行为是坏 .md 被剔除后**照常写出索引**，
+    只打一行警告、退出码仍是 0 —— 库静默少一条，投稿方以为自己写进去了。
+    现在默认**拒绝产出残缺索引**：不写任何文件 + 返回非 0。
+    确需「跳过坏的先重建其余」必须显式 allow_skip=True（CLI 的 --force），
+    且输出里必须写明本次索引不完整。
+    """
     recipes = []
     skipped = []
     if os.path.isdir(RECIPES_DIR):
@@ -611,13 +625,18 @@ def rebuild():
                 recipes.append(fm)
             else:
                 skipped.append(fn)
-    # 红队 RT-G1：坏 .md 被静默跳过，rebuild 照常产出索引 —— 库少了一条没人知道。
-    # 现在必须把跳过清单拍在维护者脸上：重建结果不完整，就是要喊出来。
-    if skipped:
-        print(f"❌ 重建不完整：{len(skipped)} 个 .md 无法解析，已从索引剔除：")
+    if skipped and not allow_skip:
+        print(f"❌ 拒绝重建：{len(skipped)} 个 .md 的 frontmatter 无法解析：")
         for fn in skipped:
             print(f"  - {fn}")
-        print("   请人工修复或删除上述文件后重跑 rebuild。")
+        print("   索引保持原样（未写入任何文件）。请修复后重跑 rebuild；")
+        print("   确需跳过请用 --force —— 但那会产出一个不完整的索引。")
+        return 1
+    if skipped and allow_skip:
+        print(f"⚠️ --force：跳过 {len(skipped)} 个坏 .md，本次索引**不完整**"
+              f"（{len(recipes)} 条）：")
+        for fn in skipped:
+            print(f"  - {fn}")
     # 重建 experiences.json（原子写：读侧永不见半截文件）
     _atomic_write(EXP_JSON,
                   # default=str 兜底：YAML 可能把 created_at 解析为 date 对象，json 无法直接序列化
@@ -638,6 +657,274 @@ def rebuild():
     lines.append("详见 CONTRIBUTING.md 与 recipe.schema.md (v3.0)。\n")
     _atomic_write(LLMS_TXT, "".join(lines))
     print(f"✅ 已重建 {LLMS_TXT}（公开 {len(pub)} 条）")
+    # 条数等式自检：目录内 .md 数 == 索引条数。差一个就是有人在静默跳过（RT-G1 复发哨兵）
+    md_count = len([f for f in os.listdir(RECIPES_DIR) if f.endswith(".md")]) \
+        if os.path.isdir(RECIPES_DIR) else 0
+    if len(recipes) != md_count:
+        print(f"❌ 条数自检失败：recipes/ 下有 {md_count} 个 .md，索引却只有 {len(recipes)} 条。")
+        # --force 的语义就是「我知道不完整，照样产出」，此时哨兵降级为警告；
+        # 但非 force 路径走到这里属于内部不一致，必须失败。
+        if allow_skip:
+            print("   --force 已显式接受不完整，不再拦截。")
+            return 0
+        return 1
+    return 0
+
+
+def check():
+    """只读预检：扫描 recipes/*.md，解析失败或缺必填字段即列出并回非 0。
+
+    与 rebuild 的区别：check 一个字节都不写，适合放进提交前自检 / CI 预检。
+    （RT-G1 配套：让「坏文件」在写索引之前就被拦下。）
+    """
+    if not os.path.isdir(RECIPES_DIR):
+        print(f"❌ 找不到配方目录：{RECIPES_DIR}")
+        return 1
+    bad_parse, bad_fields = [], []
+    total = 0
+    for fn in sorted(os.listdir(RECIPES_DIR)):
+        if not fn.endswith(".md"):
+            continue
+        total += 1
+        with open(os.path.join(RECIPES_DIR, fn), "r", encoding="utf-8") as f:
+            text = f.read()
+        fm = parse_frontmatter(text)
+        if not fm:
+            bad_parse.append(fn)
+            continue
+        missing = [k for k in REQUIRED if not fm.get(k)]
+        if missing:
+            bad_fields.append((fn, missing))
+    if not bad_parse and not bad_fields:
+        print(f"✅ check 通过：{total} 个 .md 全部可解析，必填字段齐全。")
+        return 0
+    if bad_parse:
+        print(f"❌ frontmatter 无法解析（{len(bad_parse)} 个）：")
+        for fn in bad_parse:
+            print(f"  - {fn}")
+    if bad_fields:
+        print(f"❌ 缺必填字段（{len(bad_fields)} 个）：")
+        for fn, missing in bad_fields:
+            print(f"  - {fn}：缺 {', '.join(missing)}")
+    print(f"   共扫描 {total} 个 .md。修复后重跑 check。")
+    return 1
+
+
+class MiniYamlError(Exception):
+    """内置 YAML 子集解析器遇到不支持的写法时抛出——绝不猜，猜错就是静默数据错误。"""
+
+
+def _mi_indent(line):
+    return len(line) - len(line.lstrip(" "))
+
+
+def _mi_scalar(s):
+    s = s.strip()
+    if s == "" or s in ("null", "~", "None"):
+        return None
+    if s == "{}":
+        return {}
+    if s == "[]":
+        return []
+    if s.startswith('"') and s.endswith('"') and len(s) >= 2:
+        return s[1:-1].replace('\\"', '"').replace("\\\\", "\\")
+    if s.startswith("'") and s.endswith("'") and len(s) >= 2:
+        return s[1:-1].replace("''", "'")
+    if s in ("true", "True", "yes"):
+        return True
+    if s in ("false", "False", "no"):
+        return False
+    if re.fullmatch(r"-?\d+", s):
+        return int(s)
+    if re.fullmatch(r"-?\d+\.\d+", s):
+        return float(s)
+    # 只在**起始处**判断 YAML 特殊语法：正文里的 > | & * 是普通文本
+    # （「main -> main」「score * 100」「A & B」都合法，误杀会毁掉整条配方）
+    if re.match(r"^[|>](\s|$)", s) or re.match(r"^[&*]", s) or s.startswith("!!"):
+        raise MiniYamlError("不支持的标量写法：" + s[:40])
+    if (s.startswith("{") and s != "{}") or (s.startswith("[") and s != "[]"):
+        raise MiniYamlError("不支持流样式：" + s[:40])
+    return s
+
+
+def _mi_parse_block(lines, i, indent):
+    while i < len(lines) and (not lines[i].strip() or lines[i].lstrip().startswith("#")):
+        i += 1
+    if i >= len(lines):
+        return None, i
+    s = lines[i].strip()
+    if s == "-" or s.startswith("- "):
+        return _mi_parse_seq(lines, i, indent)
+    return _mi_parse_map(lines, i, indent)
+
+
+def _mi_parse_map(lines, i, indent):
+    out = {}
+    while i < len(lines):
+        line = lines[i]
+        if not line.strip() or line.lstrip().startswith("#"):
+            i += 1
+            continue
+        cur = _mi_indent(line)
+        if cur < indent:
+            break
+        if cur > indent:
+            raise MiniYamlError("映射块缩进异常：%r" % line[:40])
+        s = line.strip()
+        if s.startswith("- "):
+            raise MiniYamlError("映射块里冒出列表项：%r" % s[:40])
+        if ":" not in s:
+            raise MiniYamlError("缺冒号：%r" % s[:40])
+        key, _, rest = s.partition(":")
+        key = key.strip()
+        rest = rest.strip()
+        if rest == "":
+            j = i + 1
+            while j < len(lines) and (not lines[j].strip() or lines[j].lstrip().startswith("#")):
+                j += 1
+            # block sequence 的缩进**可以等于**父 key 的缩进（safe_dump 就爱这么写：
+            #   tags:
+            #   - mcp      ← 「-」在列 0，与 tags 同级
+            # 只判「>」会把序列当成同级的新键，解析直接崩。
+            is_child = False
+            if j < len(lines):
+                ncur = _mi_indent(lines[j])
+                ns = lines[j].strip()
+                is_child = ncur > indent or (ncur == indent and (ns == "-" or ns.startswith("- ")))
+            if is_child:
+                out[key], i = _mi_parse_block(lines, j, _mi_indent(lines[j]))
+            else:
+                out[key] = None
+                i += 1
+        else:
+            out[key], i = _mi_parse_scalar(lines, i, indent, rest)
+    return out, i
+
+
+def _mi_parse_scalar(lines, i, indent, first):
+    """第一行已取到 first，向后吃多行续行（缩进 > indent 且不是新 key）。"""
+    f = first.strip()
+    # 引号标量单独处理：引号内部的「xxx: yyy」只是正文，不是新 key。
+    # 曾因此把一条真配方的 early_signal 截断（实测 79 条里 2 条中招）。
+    if len(f) >= 1 and f[0] in "\"'":
+        # 末尾是引号不等于闭合：'' 是转义后的一个引号，
+        # 像 "...FileNotFoundError: ''/tmp/o1.json''" 这种结尾，结束引号在下一行。
+        closed = len(f) >= 2 and f[-1] == f[0] and not f.endswith(f[0] + f[0])
+        if closed:
+            return _mi_scalar(f), i + 1
+        q = f[0]
+        parts = [f]
+        j = i + 1
+        while j < len(lines):
+            line = lines[j]
+            if line.strip() and _mi_indent(line) <= indent:
+                break
+            parts.append(line.strip())
+            j += 1
+            if line.rstrip().endswith(q):
+                break
+        return _mi_scalar(" ".join(parts)), j
+    parts = [first]
+    j = i + 1
+    while j < len(lines):
+        line = lines[j]
+        if not line.strip() or line.lstrip().startswith("#"):
+            break
+        cur = _mi_indent(line)
+        if cur <= indent:
+            break
+        s = line.strip()
+        # 看起来像新 key 的续行不是续行（YAML 里它会成为新键）
+        if re.match(r"^[A-Za-z_][\w\-]*\s*:(\s|$)", s):
+            break
+        parts.append(s)
+        j += 1
+    return _mi_scalar(" ".join(parts)), j
+
+
+def _mi_parse_seq(lines, i, indent):
+    out = []
+    while i < len(lines):
+        line = lines[i]
+        if not line.strip() or line.lstrip().startswith("#"):
+            i += 1
+            continue
+        cur = _mi_indent(line)
+        if cur < indent:
+            break
+        s = line.strip()
+        if not (s == "-" or s.startswith("- ")):
+            break
+        rest = s[1:].strip() if len(s) > 1 else ""
+        if rest == "":
+            j = i + 1
+            while j < len(lines) and not lines[j].strip():
+                j += 1
+            if j < len(lines) and _mi_indent(lines[j]) > cur:
+                child, i = _mi_parse_block(lines, j, _mi_indent(lines[j]))
+                out.append(child)
+            else:
+                out.append(None)
+                i += 1
+            continue
+        if ":" in rest and not rest.startswith(("http://", "https://")):
+            kid = cur + 2
+            key, _, v = rest.partition(":")
+            d = {}
+            if v.strip() == "":
+                j = i + 1
+                while j < len(lines) and not lines[j].strip():
+                    j += 1
+                if j < len(lines) and _mi_indent(lines[j]) > cur:
+                    d[key.strip()], i = _mi_parse_block(lines, j, _mi_indent(lines[j]))
+                else:
+                    d[key.strip()] = None
+                    i += 1
+            else:
+                d[key.strip()], i = _mi_parse_scalar(lines, i, kid, v)
+            tail, i = _mi_parse_map(lines, i, kid)
+            d.update(tail)
+            out.append(d)
+        else:
+            out.append(_mi_scalar(rest))
+            i += 1
+    return out, i
+
+
+def mini_yaml_load(text):
+    """内置 YAML **子集**解析器：只在 pyyaml 缺失时兜底（见 _parse_yaml 的说明）。"""
+    lines = text.replace("\r\n", "\n").split("\n")
+    val, i = _mi_parse_block(lines, 0, 0)
+    while i < len(lines):
+        if lines[i].strip() and not lines[i].lstrip().startswith("#"):
+            raise MiniYamlError("未能消费的行：%r" % lines[i][:40])
+        i += 1
+    return val
+
+
+_mini_warned = False
+
+
+def _parse_yaml(text):
+    """解析 YAML frontmatter：优先 pyyaml，没有则退回内置子集解析器。
+
+    为什么要有兜底（2026-10-18 反馈 §4.6）：只读路径零依赖，写侧却要 pyyaml，
+    环境不对称把「投稿/重建」的门槛抬得比「查库」高得多。
+
+    但兜底解析器的真正风险是「解析错了却不知道」——那正是 RT-G1 那类静默失败。
+    所以三重约束：① 只支持子集，遇到块标量 / 锚点 / 流样式一律抛错，绝不猜；
+    ② 上线前已拿全库 79 条做过 pyyaml 与 miniyaml 的逐条对等校验，全部一致；
+    ③ 这个等式由 tests/ingest_write.test.py 的 t9 持续守着，新增配方若用了
+       子集之外的写法会当场变红。
+    """
+    global _mini_warned
+    if yaml is not None:
+        return yaml.safe_load(text)
+    if not _mini_warned:
+        print("⚠️ 未安装 pyyaml，改用内置 YAML 子集解析器（已与 pyyaml 做过对等校验）。"
+              "为稳妥起见仍建议 `pip install pyyaml`。")
+        _mini_warned = True
+    return mini_yaml_load(text)
 
 
 def parse_frontmatter(text: str) -> dict:
@@ -647,7 +934,7 @@ def parse_frontmatter(text: str) -> dict:
     if len(parts) < 3:
         return None
     try:
-        return yaml.safe_load(parts[1])
+        return _parse_yaml(parts[1])
     except Exception as e:
         print(f"  ⚠️ frontmatter 解析失败: {e}")
         return None
@@ -664,7 +951,7 @@ def _emit_err(e: WriteError):
 
 
 if __name__ == "__main__":
-    USAGE = ("用法：python ingest.py ingest <recipe.json> | rebuild | "
+    USAGE = ("用法：python ingest.py ingest <recipe.json> | rebuild [--force] | check | "
              "submit '<json>' | promote <id> <A|B|C>")
     if len(sys.argv) < 2:
         print(USAGE)
@@ -674,7 +961,9 @@ if __name__ == "__main__":
         if cmd == "ingest" and len(sys.argv) == 3:
             ingest(sys.argv[2])
         elif cmd == "rebuild":
-            rebuild()
+            sys.exit(rebuild(allow_skip="--force" in sys.argv[2:]))
+        elif cmd == "check":
+            sys.exit(check())
         elif cmd == "submit" and len(sys.argv) == 3 and sys.argv[2] == "-":
             # 从 stdin 读：Windows 下用命令行参数传一段长 JSON 会撞长度限制
             try:
