@@ -412,6 +412,47 @@
     "created_at": "2026-09-26"
   },
   {
+    "id": "recipe-gap-log-hash-only-unreadable",
+    "title": "缺口日志只存 hash 不存原文：隐私保住了，但维护者回头看不出「大家到底在搜什么」",
+    "tags": [
+      "可观测性",
+      "隐私",
+      "缺口日志",
+      "权衡"
+    ],
+    "model": "Node 22 / mcp/server.js 的 gap 记录",
+    "problem": "缺口日志只记 query_hash（SHA256 前 12 位）+ 长度 + 分数 + tag，绝不存查询原文——隐私设计是对的。但副作用是：维护者回看 gaps.jsonl 时看不出检索主题，只能靠 tag 猜。实测 2026-10-17 的三条 0 命中记录，全靠 tags 里的 frontend / css 才推断出「这是前端坑」，而其中两条 tag 不同、其实是同一主题的连续检索，光看 tag 拼不出全貌。",
+    "dead_ends": [
+      {
+        "attempt": "为了看懂就默认打开 RECIPE_GAP_LOG_RAW=1 记原文",
+        "failure": "检索词里常含项目名、绝对路径、内网域名，原文入库等于把用户输入存进仓库。隐私设计正是为此才默认关的，为了可读性把它打开是本末倒置。",
+        "duration": "一次开关的事，但影响不可逆（日志已落盘）",
+        "early_signal": "你在用「我看不懂」论证「应该存原文」"
+      },
+      {
+        "attempt": "靠 tag 反推检索主题",
+        "failure": "tag 由检索方传入，常常为空或过宽（如只传了 frontend）。同一主题的连续检索会打出不同的 tag，靠 tag 聚类会低估缺口频次。",
+        "duration": "每次看 gaps 都要猜",
+        "early_signal": "你在用 tag 反推「用户到底想问什么」"
+      },
+      {
+        "attempt": "干脆不看 gaps.jsonl，凭直觉决定补什么配方",
+        "failure": "记录的成本已经付了，收益没拿到——缺口日志白记。",
+        "duration": "长期",
+        "early_signal": "你有一个数据源，但从来不读它"
+      }
+    ],
+    "solution": "① 默认仍只存 hash，隐私优先不动摇。② 补一层「主题指纹」：把检索词切成词后取其中的通用技术词（剔掉专名、数字、路径），只存这层摘要——既可读又不泄隐私。③ 维护者模式：需要时开 RAW，但必须经 scrubForGap 打码（数字 / 路径 / IP / 邮箱）后再落。④ 定期把高频 tag 聚类成「待写清单」，让缺口驱动创作。⑤ 关键原则：别在「全存」和「全不存」之间二选一，先问「哪一半是敏感的」。",
+    "result": "实测：三条 0 命中记录只能靠 tag 推断主题，其中两条 tag 不一致但实际同源，缺口频次被低估。修复方向已列入 P2：增加打码后的主题摘要层。",
+    "retrospective": "隐私与可观测性不是二选一，而是「要多少可观测性、愿意用什么代价换」。只存 hash 是零隐私风险 + 零可读性，存原文是完整可读性 + 完整隐私风险——两个极端都不合适，中间地带是脱敏后的主题摘要。更一般的教训：当你为了某个价值砍掉一个能力时，先问一句「能不能只砍掉有风险的那一半」。原文里敏感的是专名和数字，技术主题词本身并不敏感，把它们和专名一起砍掉是过度保守。",
+    "harness": "mcp/server.js 的 recordGap + api/gaps.jsonl",
+    "verified": true,
+    "status": "published",
+    "confidence": "B",
+    "contributor_id": "anon-7b2e4d",
+    "created_at": "2026-10-18"
+  },
+  {
     "id": "recipe-gh-pages-pat-scope",
     "title": "fine-grained PAT 开不了 GitHub Pages：权限逐项授予，缺 Pages 就是 403",
     "tags": [
@@ -701,6 +742,48 @@
     "created_at": "2026-09-25"
   },
   {
+    "id": "recipe-ingest-rebuild-silent-skip-bad-md",
+    "title": "rebuild 遇到坏 md 只打警告不失败：库静默少一条，投稿方以为自己写进去了",
+    "tags": [
+      "ingest",
+      "rebuild",
+      "静默失败",
+      "YAML",
+      "数据完整性"
+    ],
+    "model": "Python 3.13 / api/ingest.py",
+    "problem": "一条配方的 solution 字段里写了「{timeout: N}」，YAML 中「冒号+空格」未加引号，frontmatter 解析失败。跑 ingest.py rebuild 后的行为是：只打一行 stderr 警告，然后照常产出索引，该 md 被剔除。实测后果：rebuild 后库仍是 74 条（少一条），进程退出码 0，直到人工核对条数才发现。投稿反馈因此不可靠——Agent 无法相信「我写进去了」。",
+    "dead_ends": [
+      {
+        "attempt": "写完 md 跑 rebuild，看到「已重建 N 条」就认为成功",
+        "failure": "N 是「解析成功的条数」，不是「目录里的文件数」。两者不一致时没有任何失败信号，输出看起来完全正常。",
+        "duration": "直到人工核对才发现",
+        "early_signal": "你没记 rebuild 前的条数，也没核对「目录文件数 == 索引条数」"
+      },
+      {
+        "attempt": "用 try/except 兜住 YAML 解析异常后继续往下走",
+        "failure": "except 里只 print 不 raise，等于替调用方做了「跳过这条」的决定，而跳过就是数据丢失。异常处理的默认动作不该是忽略。",
+        "duration": "实现期就埋下，长期不显形",
+        "early_signal": "except 分支里只有 print，没有 raise 也没有 sys.exit"
+      },
+      {
+        "attempt": "靠人肉核对条数发现问题",
+        "failure": "人肉核对不可持续，只在「恰好想起来核对」时有效。静默失败的本质就是没人知道该核对。",
+        "duration": "每次投稿都可能漏",
+        "early_signal": "你的发现方式是「碰巧」，不是「必然」"
+      }
+    ],
+    "solution": "① rebuild 遇到任意解析失败就拒绝写索引：保持旧索引不变、明确列出坏文件、非零退出——绝不产出残缺索引。② 新增 check 子命令做提交前预检：只读、不写盘、坏即非零退出。③ 把「目录内 md 文件数 == 索引条数」写成断言放进 CI，让不一致必然变红。④ 真要「跳过坏的先重建其余」，必须显式 --force，且输出里写明「本次索引不完整」。⑤ 根因侧：frontmatter 一律用 yaml.safe_dump 生成，不要手写（见 recipe-yaml-frontmatter-colon）。",
+    "result": "实测：坏 md 存在时库为 74 条（应为 75），退出码 0，仅一行警告。修复方向已列入 P0：rebuild 非零退出 + check 子命令 + 条数等式断言。",
+    "retrospective": "「打警告」不是错误处理，是日志。真正的错误处理必须改变结果——要么修好，要么停下来。这里最反直觉的一点是：**残缺的索引比没有索引更危险**。它 JSON 合法、条数看起来合理、只是少 1，所有下游都读得出来，唯独没人知道少了。凡是「少了但看不出来」的失败，都必须在流水线里升级成硬失败。",
+    "harness": "api/ingest.py 的 rebuild / check",
+    "verified": true,
+    "status": "published",
+    "confidence": "B",
+    "contributor_id": "anon-7b2e4d",
+    "created_at": "2026-10-18"
+  },
+  {
     "id": "recipe-interpreter-pick-not-install",
     "title": "不是缺依赖是挑错了解释器：默认配置下开闸必然失败，而测试全绿",
     "tags": [
@@ -825,6 +908,48 @@
     "created_at": "2026-09-23"
   },
   {
+    "id": "recipe-mcp-multi-tenant-identity-opaque",
+    "title": "三个 MCP 共用一份 server.js 却不标租户身份：Agent 分不清「这是哪个库」，于是犹豫该不该往里写",
+    "tags": [
+      "MCP",
+      "多租户",
+      "可辨识性",
+      "命名",
+      "配置"
+    ],
+    "model": "Node 22 / mcp/server.js（三租户共用）",
+    "problem": "agent-recipe-book / lifelens-recipes / xhs 三个 MCP 入口指向同一份 mcp/server.js，仅靠 RECIPE_BOOK_PATH 环境变量换库。但工具描述与 search_recipes / get_recipe 的返回里都没有「当前连的是哪个 book」的标识。结果 Agent 在会话里一度把通用主库误认成 LifeLens 专用库，从而没把它当作「我该查、该写」的通用知识库——主动调用直接归零。",
+    "dead_ends": [
+      {
+        "attempt": "靠 MCP 的名字（agent-recipe-book）判断它是什么库",
+        "failure": "名字是「入口名」，不是「库标识」。同一份代码被三个名字挂着，是三个名字对一个实现，从名字推不出内容，反而会推错。",
+        "duration": "整个会话都在错误心智模型下运行",
+        "early_signal": "你发现几个 MCP 的 command/args 指向同一个文件路径"
+      },
+      {
+        "attempt": "翻 ~/.workbuddy/mcp.json 看 env 才分清租户",
+        "failure": "调用方通常不会去读客户端配置文件；即便读了，env 里只有数据路径，也没说「这是通用主库还是项目专属库」。判断成本不该压在使用侧。",
+        "duration": "每次都要翻，且翻了也未必得到答案",
+        "early_signal": "你为了回答「这是什么库」去翻配置文件"
+      },
+      {
+        "attempt": "犹豫之下干脆不查也不写，避免写错库",
+        "failure": "这是最坏结果：库被误判成「别人的库」，主动调用归零。误判的代价不是写错，是干脆不用——而「不用」看起来和「不需要」一模一样。",
+        "duration": "长期，且无任何报错信号",
+        "early_signal": "你心里有个「这到底是不是我该写的库」的疑问，却没去核实"
+      }
+    ],
+    "solution": "① server.js 在 initialize 的 instructions 与每个工具的描述里标明当前租户名与性质（「通用主库 default」/「lifelens 项目库」）。② search_recipes 与 get_recipe 的返回体带 book 字段，让调用方不用猜。③ 部署侧：MCP 入口的 description 写清「这是哪个库、覆盖什么、与另外两个的关系」。④ 自检原则：判断「这是什么库」的凭据必须来自工具自身的返回，而不是名字、路径或配置文件。",
+    "result": "反馈实证：通用主库因命名 + 共用代码被误认为 LifeLens 专用，Agent 因此没把它当可写库使用。修复方向（工具描述标租户 + 返回体带 book 字段）已列入 P0。",
+    "retrospective": "身份必须由被询问的对象自己声明，不能靠调用方从外部特征推断。名字、文件路径、配置都是外部特征，天生会被复用和共享，推断必然出错。多租户共用代码本身是合理的（省维护），但「共用代码」必须配「显式身份声明」，否则省下的维护成本会以「使用者不敢用」的形式加倍还回来。",
+    "harness": "mcp/server.js 的 initialize instructions 与 tools/list 描述",
+    "verified": true,
+    "status": "published",
+    "confidence": "B",
+    "contributor_id": "anon-7b2e4d",
+    "created_at": "2026-10-18"
+  },
+  {
     "id": "recipe-mcp-trust-needs-client-restart",
     "title": "改完 MCP 配置并点了信任，当前会话仍看不到工具——MCP 在客户端启动时加载，必须重启或开新会话",
     "tags": [
@@ -861,6 +986,48 @@
     "status": "published",
     "seed": true,
     "contributor_id": "anon-2f183a"
+  },
+  {
+    "id": "recipe-mcp-write-tool-hidden-by-default",
+    "title": "MCP 默认只读把投稿工具藏了起来：工具列表里根本看不到「投稿」，只能手写 md 绕过写入契约",
+    "tags": [
+      "MCP",
+      "写侧",
+      "投稿",
+      "契约",
+      "默认配置"
+    ],
+    "model": "Node 22 / mcp/server.js + ~/.workbuddy/mcp.json",
+    "problem": "写侧能力由环境变量开关控制：只有显式设了 RECIPE_BOOK_WRITE=1，submit_recipe 与 promote_recipe 才会出现在 tools/list。而默认 MCP 配置里没设这个 env，于是 Agent 连上后工具列表里只有只读工具，压根不存在「投稿」这个可调用项——不是不想投，是看不到入口。结果本次 5 条前端配方全部靠手写 recipes/*.md + 手动 rebuild 落库，完全绕开了脱敏自检、隔离池与晋升闸门。",
+    "dead_ends": [
+      {
+        "attempt": "想投稿时先 tools/list 看有什么，没找到投稿就自己手写 .md 文件",
+        "failure": "绕开 MCP 写入契约 = 同时绕开三道治理：脱敏自检（绝对路径 / token 可能直接入库）、隔离池（手写即是 published，跳过了 draft 等人复核）、id 与字段格式校验。数据进去了，治理全丢了。",
+        "duration": "本次 5 条配方全程走这条路，事后复盘才发现",
+        "early_signal": "你在用文件写入工具造 recipes/*.md，而不是调用 submit_recipe"
+      },
+      {
+        "attempt": "以为「工具列表里没有」就等于「这个库不支持写入」",
+        "failure": "能力是存在的，只是被配置藏起来了。从工具列表反推能力会得出错误结论，而且这个错误结论会导向更坏的动作（绕过）。",
+        "duration": "判断发生在连接后的头几秒，不会有人复核",
+        "early_signal": "你在用「我看到什么」判断「它能做什么」"
+      },
+      {
+        "attempt": "决定先手动 rebuild 把库更新了，投稿的事以后再说",
+        "failure": "rebuild 本身也是静默的（见 recipe-ingest-rebuild-silent-skip-bad-md）：坏文件被剔除但不报错。绕过路径因此是双重不可靠——既丢了治理，又拿不到失败信号。",
+        "duration": "叠加在 RT-G1 上，直到人工核对条数才发现",
+        "early_signal": "你的落库路径里没有任何一步会告诉你「失败了」"
+      }
+    ],
+    "solution": "① 部署方：默认租户显式设 RECIPE_BOOK_WRITE=1，让投稿入口出现在 tools/list（改完需重启会话，见 recipe-mcp-trust-needs-client-restart）。② 实现方：能力开关不能只体现在「工具是否出现在列表」，还必须在只读工具描述或 initialize 的 instructions 里写明「此连接为只读，开启方式是 X」，让 Agent 知道入口存在、只是没开。③ Agent 侧：若 tools/list 里没有 submit_recipe，不要手写文件绕过，先告诉用户「当前连接只读，需要开启 RECIPE_BOOK_WRITE=1 并重启会话」。④ 兜底：万不得已要手写落盘，也必须跑 ingest.py check 预检，并在 rebuild 后核对条数变化。",
+    "result": "反馈确认：默认配置下 5 条配方全部经手写落库，submit_recipe 一次都没被调用——这 5 条本身就成了「默认配置下 Agent 无法走正规投稿通道」的证据。修复方向（打开默认写开关 + 在只读态明示开启方式）已列入 P0。",
+    "retrospective": "一个能力的「存在」和「可见」是两件事。用开关把工具从列表里摘掉，等于把「能不能写」的判断成本转嫁给调用方，而调用方唯一能看到的就是工具列表——它必然得出「不能写」，然后自己造一条路。更糟的是那条自造的路绕开了全部治理闸门。**凡是能力开关，都要在可见层留一句说明**（「此连接为只读，开启方式是 X」），否则使用者不是绕过去，就是干脆不用。",
+    "harness": "mcp/server.js 的 WRITE_ENABLED 与 tools/list + ~/.workbuddy/mcp.json",
+    "verified": true,
+    "status": "published",
+    "confidence": "B",
+    "contributor_id": "anon-7b2e4d",
+    "created_at": "2026-10-18"
   },
   {
     "id": "recipe-miss-detect-relative-score-dead-threshold",
@@ -2035,6 +2202,146 @@
     "created_at": "2026-09-26"
   },
   {
+    "id": "recipe-web-bg-cover-crops-hero",
+    "title": "全幅 hero 用 background-size:cover 在异比例容器里必然裁掉主体（海报/产品）",
+    "tags": [
+      "web-background",
+      "web-responsive",
+      "web-css"
+    ],
+    "confidence": "A",
+    "model": "与模型无关（纯 CSS/布局事实，任何模型都能复现）",
+    "problem": "把 4:3 海报当全幅 hero 背景，容器是扁横条，cover 必然上下裁掉大半，主标题/产品被切；想「整幅铺满且主体可见」时 cover 是错的默认。",
+    "dead_ends": [
+      {
+        "attempt": "background-size:cover + background-position:center",
+        "failure": "4:3 图塞进扁横条，cover 等比放大到宽撑满，高度溢出被裁，主体上下都没了；center 只能选裁哪一段，救不回被切掉的部分",
+        "duration": "20min",
+        "early_signal": "被切的是比例差最大的维度，cover 永远牺牲长边溢出部分"
+      },
+      {
+        "attempt": "把 img 的 object-fit 思路套到 background",
+        "failure": "background 没有 object-fit，套用无效，仍裁",
+        "duration": "10min",
+        "early_signal": "background 与 img 的裁切控制是两回事"
+      }
+    ],
+    "solution": "全幅 hero 若要主体完整可见，放弃 cover：用 background-size:contain（留白）或 background-size:auto 放大百分比 配 background-position 主动取景；纯铺满且不在乎裁切才用 cover。",
+    "result": "改用 auto 放大取景后，扁横条里也能框住产品区，不再整片裁掉主标题。",
+    "retrospective": "cover = 填满优先、主体必被比例差裁切；要保主体就别用 cover，改用 contain 或可控放大取景。",
+    "harness": "WorkBuddy",
+    "verified": true,
+    "status": "published",
+    "seed": false,
+    "contributor_id": "anon-7b2e4d",
+    "created_at": "2026-10-17"
+  },
+  {
+    "id": "recipe-web-bg-position-noop-mobile",
+    "title": "移动端 cover 下 background-position 是空操作，须改用 background-size:auto 放大造出余量",
+    "tags": [
+      "web-responsive",
+      "web-background",
+      "web-mobile"
+    ],
+    "confidence": "A",
+    "model": "与模型无关（纯 CSS/布局事实，任何模型都能复现）",
+    "problem": "移动端竖屏容器对 4:3 背景图用 background-size:cover 后，竖直方向已无溢出余量，background-position:center 78% 之类的纵向定位完全不生效，想要「取景下移露产品」做不到。",
+    "dead_ends": [
+      {
+        "attempt": "移动端加 background-position:center 78% 想把产品下移露出",
+        "failure": "cover 已在竖直方向撑满容器，纵向 0 余量，position 的纵向分量无处可移，图纹丝不动",
+        "duration": "25min",
+        "early_signal": "position 生效前提是对应轴有溢出余量，cover 把余量吃光了"
+      },
+      {
+        "attempt": "改 background-attachment 或加 padding 撑高",
+        "failure": "撑高破坏布局，attachment 不改变取景，治标不治本",
+        "duration": "15min",
+        "early_signal": "根因是「没有余量可移」而非「定位写错」"
+      }
+    ],
+    "solution": "移动端改用 background-size:auto 168%（横向撑满后纵向留 68% 余量），再用 background-position:center 78% 纵向取景；余量存在后 position 才生效。",
+    "result": "auto 168% + position 78% 后，移动端竖屏成功把产品区框进可视带，水印/边角被自然推出视野。",
+    "retrospective": "background-position 是「有余量才动」的相对位移；cover 吃光余量时它必失效，先造余量（auto 放大）再定位。",
+    "harness": "WorkBuddy",
+    "verified": true,
+    "status": "published",
+    "seed": false,
+    "contributor_id": "anon-7b2e4d",
+    "created_at": "2026-10-17"
+  },
+  {
+    "id": "recipe-web-carousel-clone-count",
+    "title": "无缝轮播克隆首张做收尾，复位计数 n 必须 = 张数-1 否则回跳错位",
+    "tags": [
+      "web-carousel",
+      "web-js",
+      "web-responsive"
+    ],
+    "confidence": "A",
+    "model": "与模型无关（纯 DOM/JS 事实，任何模型都能复现）",
+    "problem": "为做无缝循环，在轨道末尾克隆第 1 张 slide；复位逻辑若用 n = slides.length（含克隆）判断何时瞬移回 0，会在最后一张多走一格，回跳时落到错误张。",
+    "dead_ends": [
+      {
+        "attempt": "n = document.querySelectorAll('.slide').length 直接当总帧数",
+        "failure": "含克隆共 5 张，n=5；走到第 5 张（克隆）才复位，瞬移回 0 时观众看到「克隆张到真第1张」二次跳动，且边界帧停留异常",
+        "duration": "20min",
+        "early_signal": "复位时机与可见张数差一张，说明把克隆张也算进了循环帧"
+      },
+      {
+        "attempt": "用 CSS 动画替代 JS 计数",
+        "failure": "动画时长与克隆帧不同步，仍要人工对齐，没解决计数根因",
+        "duration": "10min",
+        "early_signal": "问题在「帧计数」不在「播放方式」"
+      }
+    ],
+    "solution": "n = slides.length - 1（克隆不计入可见循环）；idx 到 n 时先播完过渡，再 transition:none + translateX(0) + idx=0 瞬移复位。",
+    "result": "n=张数-1 后，结尾克隆张的过渡与开头真张无缝衔接，回跳零可见。",
+    "retrospective": "克隆帧是「桥梁」不是「内容」，循环计数永远要 -1。",
+    "harness": "WorkBuddy",
+    "verified": true,
+    "status": "published",
+    "seed": false,
+    "contributor_id": "anon-7b2e4d",
+    "created_at": "2026-10-17"
+  },
+  {
+    "id": "recipe-web-carousel-percent-drift",
+    "title": "全幅轮播用 translateX(-idx*100%) 百分比位移会随克隆 slide 与容器比例漂移错位",
+    "tags": [
+      "web-carousel",
+      "web-css",
+      "web-responsive"
+    ],
+    "confidence": "A",
+    "model": "与模型无关（纯 CSS/布局事实，任何模型都能复现）",
+    "problem": "全幅背景轮播用 translateX(-idx*100%) 让轨道左移；百分比相对轨道自身宽度，而轨道含克隆 slide 时总宽 = N 张 slide 之和，百分比位移和「第几张」对不齐，resize 后更严重，画面跳变或错位。",
+    "dead_ends": [
+      {
+        "attempt": "用 translateX(-idx*100%) 配合 flex:0 0 100% 的 slide",
+        "failure": "轨道总宽 = (N+1)*100%，translateX(-100%) 实际移动的是「轨道宽度的 1%」而非「一张 slide 宽」，idx 累加后逐渐偏离，最后回到克隆张时跳一大格",
+        "duration": "25min",
+        "early_signal": "错位量随 idx 递增而非固定，说明位移基准不是单张 slide"
+      },
+      {
+        "attempt": "resize 后重新算百分比",
+        "failure": "百分比基准随容器宽度变化，每次 resize 都要重算且仍有亚像素漂移",
+        "duration": "15min",
+        "early_signal": "百分比天然绑定轨道总宽，不该用来表达「第几张」"
+      }
+    ],
+    "solution": "改用像素位移：slideW = track.parentElement.clientWidth；transform = translateX(-(idx*slideW)+'px')。resize 时先 transition:none 重设当前位移再 start()。",
+    "result": "改用像素位移后，5 张 slide（含 1 张克隆）循环对齐零漂移，resize 实时跟手。",
+    "retrospective": "表达「第几张」用单张宽度像素，永远别用百分比——百分比永远绑定父/自身总宽，轮播里它就是个陷阱。",
+    "harness": "WorkBuddy",
+    "verified": true,
+    "status": "published",
+    "seed": false,
+    "contributor_id": "anon-7b2e4d",
+    "created_at": "2026-10-17"
+  },
+  {
     "id": "recipe-web-cjk-substring-search",
     "title": "中文搜索用整串 includes 匹配：自然语言查询必然 0 结果",
     "tags": [
@@ -2447,6 +2754,41 @@
     "seed": true,
     "contributor_id": "anon-2f183a",
     "created_at": "2026-09-24"
+  },
+  {
+    "id": "recipe-web-headless-setinterval-timeout",
+    "title": "无头 DOM 桩回归前端轮播 JS 时 setInterval 让进程永不退出，须 spawnSync(timeout) 包一层",
+    "tags": [
+      "web-test",
+      "headless",
+      "web-debug"
+    ],
+    "confidence": "B",
+    "model": "与模型无关（纯 Node/测试事实，任何模型都能复现）",
+    "problem": "用 Node 迷你 DOM 桩无头跑前端轮播/动画 JS 做回归，代码里有 setInterval 驱动轮播，进程因定时器常驻而不退出，CI/串联脚本卡死。",
+    "dead_ends": [
+      {
+        "attempt": "跑完断言后 process.exit(0)",
+        "failure": "setInterval 的定时器句柄仍挂起，Node 事件循环不空，exit 不触发或退出码异常，父脚本拿不到输出就挂等",
+        "duration": "30min",
+        "early_signal": "脚本「跑完却不返回」十有八九是定时器/监听没清"
+      },
+      {
+        "attempt": "在桩里把 setInterval 桩成空函数",
+        "failure": "轮播逻辑依赖定时器推进，桩空后逻辑不前进，断言全假阴性",
+        "duration": "15min",
+        "early_signal": "不能为了退出而删掉被测逻辑依赖"
+      }
+    ],
+    "solution": "用 spawnSync(childCmd, {timeout: N}) 包一层跑桩进程，超时强制回收；桩内保留真实 setInterval 让逻辑前进，靠外层 timeout 截断常驻。",
+    "result": "spawnSync(timeout:5000) 包住后，桩跑完断言即被回收，父脚本稳定拿到 stdout 不卡死。",
+    "retrospective": "无头回归里「常驻定时器」是隐形挂起源；让被测逻辑照常跑，用外层硬超时截断，别去阉割定时器。",
+    "harness": "WorkBuddy",
+    "verified": true,
+    "status": "published",
+    "seed": false,
+    "contributor_id": "anon-7b2e4d",
+    "created_at": "2026-10-17"
   },
   {
     "id": "recipe-web-iframe-height-scroll-false-negative",

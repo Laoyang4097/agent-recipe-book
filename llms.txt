@@ -12,15 +12,19 @@
 - recipes/recipe-eval-recipe-pushes-model-to-unavailable-dependency.md: 配方把模型推向环境里根本不存在的依赖：注入组 5/5 全灭，看着像「配方有害」，其实是依赖缺口 — ① **评测前把环境契约写成显式白名单**：系统提示里不要只说「requests
 - recipes/recipe-eval-unbounded-loop-burns-ephemeral-ports.md: 模型写出无终止条件的循环 + 靶站「不报错」= 烧穿本机临时端口，把后面所有记录一起打空 — ① **先记住第一版修复是失败的：只在靶站侧阻断，挡不住风暴。** 第一版做法是
 - recipes/recipe-fixture-fake-weak-match.md: 自己造的弱命中探针是假的：断言自己实现了自己的期望值 — ① 关键词绝不出现在探针的 title 里，只放在 problem/body；②
+- recipes/recipe-gap-log-hash-only-unreadable.md: 缺口日志只存 hash 不存原文：隐私保住了，但维护者回头看不出「大家到底在搜什么」 — ① 默认仍只存 hash，隐私优先不动摇。② 补一层「主题指纹」：把检索词切成词
 - recipes/recipe-gh-pages-pat-scope.md: fine-grained PAT 开不了 GitHub Pages：权限逐项授予，缺 Pages 就是 403 — 两条路：① 给该 fine-grained PAT 追加 Pages: Read
 - recipes/recipe-git-api-push-stale-ref.md: 走 API 推送后本地显示 ahead N：本地 origin 指针的陈旧假象 — ① 用「内容比对」而非「引用计数」判断同步：逐文件对比本地内容与远端 API 返
 - recipes/recipe-git-pat-push.md: 用 fine-grained PAT 推 GitHub：Bearer 头被 git 忽略，必须 URL 内嵌 token 当 Basic Auth — ① git smart-HTTP 用 Basic Auth，Bearer 头无效
 - recipes/recipe-git-push-no-tty-credential.md: Git Bash 无 tty 下推 GitHub：extraheader 被忽略、credential-manager 弹不了窗 — ① 绕开凭据管理器：`git config --local credential
 - recipes/recipe-git-repo-location-assumed.md: 只查一层就说"这里不是 git 仓库"——验证范围小于结论所依赖的前提 — 判断仓库位置用 `find . -maxdepth 3 -name ".git"
 - recipes/recipe-infra-verify-silent-pass.md: 三处"验证通过"其实是没验证到：端口残留 / 日志过滤 / 兜底分类 — ① 服务/探针类脚本：启动前确认端口真的空闲，日志落文件而不是写 /dev/nu
+- recipes/recipe-ingest-rebuild-silent-skip-bad-md.md: rebuild 遇到坏 md 只打警告不失败：库静默少一条，投稿方以为自己写进去了 — ① rebuild 遇到任意解析失败就拒绝写索引：保持旧索引不变、明确列出坏文件
 - recipes/recipe-interpreter-pick-not-install.md: 不是缺依赖是挑错了解释器：默认配置下开闸必然失败，而测试全绿 — ① 按能力筛不按名字猜：候选逐个试 `python -c "import yam
 - recipes/recipe-managed-python-env-pitfalls.md: 在 WorkBuddy 托管 Python 环境跑依赖脚本的坑（缺包 / 丢 git 身份 / cwd 不持久 / YAML 日期序列化） — ① 建隔离 venv 装依赖：`python -m venv .../envs/
+- recipes/recipe-mcp-multi-tenant-identity-opaque.md: 三个 MCP 共用一份 server.js 却不标租户身份：Agent 分不清「这是哪个库」，于是犹豫该不该往里写 — ① server.js 在 initialize 的 instructions 
 - recipes/recipe-mcp-trust-needs-client-restart.md: 改完 MCP 配置并点了信任，当前会话仍看不到工具——MCP 在客户端启动时加载，必须重启或开新会话 — 1) 先排除配置本身：在命令行直接跑一次 server（如 printf 一行 
+- recipes/recipe-mcp-write-tool-hidden-by-default.md: MCP 默认只读把投稿工具藏了起来：工具列表里根本看不到「投稿」，只能手写 md 绕过写入契约 — ① 部署方：默认租户显式设 RECIPE_BOOK_WRITE=1，让投稿入口出
 - recipes/recipe-miss-detect-relative-score-dead-threshold.md: 拿归一化匹配度当「没找到」的阈值，这条分支永远走不到——Top1 恒为 100% — ① 先搞清楚分数是怎么算出来的——相对归一化的分数不能当绝对阈值，只有原始分或未
 - recipes/recipe-pj-guess-as-conclusion.md: 把拍脑袋的估计当结论写进文档 —— 20 分钟能测出来的数，用「大概」代替 — 把「性能 / 容量」类断言统一改成「实测 + 拐点」写法：写一个 20 行的基准
 - recipes/recipe-pj-requirement-misremembered.md: 把需求原文记错，按「常识」排期 —— 差点白耗 2-3 天做错重点 — 把需求原文拆成三栏清单：第一期必交 / 第一期可选 / 最终交付必交，每条标注原
@@ -50,6 +54,10 @@
 - recipes/recipe-tmp-gitbash-vs-windows-python.md: Git Bash 的 /tmp 和 Windows Python 眼里的 /tmp 不是同一个目录 — 改用两边都认的临时目录绝对路径，测试里统一用它，不再写 /tmp。
 - recipes/recipe-unreachable-branch-in-engine.md: 生产路径走不到的分支也要单测它：否则又是一段没人走的死代码 — 单测直接打 promotion_errors()，绕开上游门禁单独验证这条分支：
 - recipes/recipe-validate-without-assign.md: 校验了却忘了赋值：类型检查过了，交下去的内容还是空的 — 校验与赋值配对写：类型不合规就抛 -32602，合规就原样写进 payload，
+- recipes/recipe-web-bg-cover-crops-hero.md: 全幅 hero 用 background-size:cover 在异比例容器里必然裁掉主体（海报/产品） — 全幅 hero 若要主体完整可见，放弃 cover：用 background-s
+- recipes/recipe-web-bg-position-noop-mobile.md: 移动端 cover 下 background-position 是空操作，须改用 background-size:auto 放大造出余量 — 移动端改用 background-size:auto 168%（横向撑满后纵向留
+- recipes/recipe-web-carousel-clone-count.md: 无缝轮播克隆首张做收尾，复位计数 n 必须 = 张数-1 否则回跳错位 — n = slides.length - 1（克隆不计入可见循环）；idx 到 n
+- recipes/recipe-web-carousel-percent-drift.md: 全幅轮播用 translateX(-idx*100%) 百分比位移会随克隆 slide 与容器比例漂移错位 — 改用像素位移：slideW = track.parentElement.clie
 - recipes/recipe-web-cjk-substring-search.md: 中文搜索用整串 includes 匹配：自然语言查询必然 0 结果 — 中文按 2-gram 切分、英文数字按词切分，任一命中即算匹配（OR 语义），按
 - recipes/recipe-web-dark-block-patchwork.md: 白底页面上硬贴一块深色搜索框：像补丁，不像设计 — 回归层级手段做焦点：白底 + 清晰边框 + 聚焦时的强调色光环 + 字重/字号对
 - recipes/recipe-web-decorative-motion-debt.md: 粒子背景+扫描线+均衡器：自己觉得科技感，实际是设计债 — 全部删除。只保留功能性动效：滚动入场（IntersectionObserver）
@@ -60,6 +68,7 @@
 - recipes/recipe-web-focus-vs-scroll-conflict.md: input.focus() 与滚动到结果打架：焦点把视口又拽回搜索框 — 移除滚动类操作里的 input.focus()。若确实需要保留输入便利性，应改为
 - recipes/recipe-web-headless-min-window-width.md: headless 浏览器有最小窗口宽度：--window-size=390 实际渲染成 496px — 不要用 --window-size 模拟移动端。改为：用一个固定 width:3
 - recipes/recipe-web-headless-profile-conflict.md: 连续跑多个 headless 实例报 exit 23：用户数据目录被抢占 — 给每个 headless 实例指定独立的 --user-data-dir（如 .
+- recipes/recipe-web-headless-setinterval-timeout.md: 无头 DOM 桩回归前端轮播 JS 时 setInterval 让进程永不退出，须 spawnSync(timeout) 包一层 — 用 spawnSync(childCmd, {timeout: N}) 包一层跑
 - recipes/recipe-web-iframe-height-scroll-false-negative.md: iframe 高度≥内容高度时测不到滚动：scrollY 恒为 0 的假阴性 — 把验证用 iframe 的高度设为一个真实视口高度（如 1000px），确保内容
 - recipes/recipe-web-lineclamp-vs-highlight.md: 截断与高亮打架：命中词被 line-clamp 藏掉，结果显得莫名其妙 — ① 视觉截断交给 CSS -webkit-line-clamp，JS 的 sli
 - recipes/recipe-web-measure-race-condition.md: 测量竞态：元素在 1500ms 移除，我恰好在 1500ms 测量 — 在动画进行中（如 120ms）也抓一次状态，而不是只在终点测一次。最终报告同时输
